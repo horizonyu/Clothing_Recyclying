@@ -10,8 +10,8 @@ const ENV = 'development';
 const config = {
   // 开发环境
   development: {
-    API_BASE_URL: 'http://localhost:8000/api/v1',  // 本地后端地址
-    // API_BASE_URL: 'https://dev-api.yourdomain.com/api/v1',  // 开发服务器
+    // API_BASE_URL: 'http://localhost:8000/api/v1',  // 本地后端地址
+    API_BASE_URL: 'http://42.194.134.223:8000/api/v1',  // 开发服务器
     WS_URL: 'ws://localhost:8000/ws',
     DEBUG: true
   },

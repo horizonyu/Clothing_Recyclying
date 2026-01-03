@@ -27,12 +27,10 @@ Page({
   },
 
   onShow() {
-    // 每次显示时重置状态
+    // 只重置扫码状态，不重置弹窗状态
+    // 否则扫码返回后弹窗会被关闭
     this.setData({
-      scanning: false,
-      orderInfo: null,
-      showClaimModal: false,
-      claiming: false
+      scanning: false
     });
   },
 
@@ -81,6 +79,11 @@ Page({
         } catch (e) {
           util.hideLoading();
           
+          // 打印详细错误信息（调试用）
+          console.error('❌ 扫码处理失败:', e);
+          console.error('错误码:', e.code);
+          console.error('错误信息:', e.message);
+          
           // 根据错误码显示不同提示
           if (e.code === 10001) {
             util.showError('二维码无效或已过期');
@@ -88,6 +91,8 @@ Page({
             util.showError('该订单已被领取');
           } else if (e.code === 10004) {
             util.showError('二维码已过期');
+          } else if (e.code === 401) {
+            util.showError('请先登录');
           } else {
             util.showError(e.message || '解析失败');
           }

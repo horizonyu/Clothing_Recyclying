@@ -22,10 +22,16 @@ def generate_signature(data: dict, device_secret: str) -> str:
     return signature
 
 
-def generate_voucher_id(device_id: str, sequence: int = 1) -> str:
-    """生成凭证ID"""
+def generate_voucher_id(device_id: str, sequence: int = None) -> str:
+    """生成凭证ID
+    
+    如果不指定序号，则使用时间戳后6位作为序号，确保唯一性
+    """
     date_str = datetime.now().strftime("%Y%m%d")
-    return f"V{date_str}{device_id}{sequence:03d}"
+    if sequence is None:
+        # 使用时间戳后6位，确保每次生成都不同
+        sequence = int(time.time()) % 1000000
+    return f"V{date_str}{device_id}{sequence:06d}"
 
 
 def generate_qrcode_data(
@@ -34,7 +40,7 @@ def generate_qrcode_data(
     weight_gram: int,
     unit_price_fen: int = 30,
     expire_seconds: int = 3600,
-    sequence: int = 1
+    sequence: int = None
 ) -> str:
     """
     生成二维码数据
@@ -100,7 +106,7 @@ def main():
         device_secret=device_secret,
         weight_gram=weight,
         unit_price_fen=30,  # 0.30元/kg
-        expire_seconds=3600  # 10分钟
+        expire_seconds=3600  # 1小时
     )
     
     print("\n" + "=" * 60)

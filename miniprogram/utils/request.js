@@ -53,7 +53,7 @@ class Request {
         success: (res) => {
           // 打印响应信息（调试用）
           if (config.DEBUG) {
-            console.log('📥 Response:', res.data);
+            console.log('📥 Response [' + res.statusCode + ']:', res.data);
           }
 
           // 处理HTTP状态码
@@ -77,7 +77,24 @@ class Request {
           } else if (res.statusCode >= 500) {
             reject({ code: res.statusCode, message: '服务器错误，请稍后重试' });
           } else {
-            reject({ code: res.statusCode, message: res.data.message || '请求失败' });
+            // 400 等其他错误 - FastAPI 返回的错误在 detail 字段
+            const detail = res.data.detail;
+            let errorMsg = '请求失败';
+            let errorCode = res.statusCode;
+            
+            if (detail) {
+              if (typeof detail === 'object') {
+                errorCode = detail.code || res.statusCode;
+                errorMsg = detail.message || JSON.stringify(detail);
+              } else {
+                errorMsg = detail;
+              }
+            } else if (res.data.message) {
+              errorMsg = res.data.message;
+            }
+            
+            console.error('❌ HTTP Error:', res.statusCode, detail || res.data);
+            reject({ code: errorCode, message: errorMsg });
           }
         },
         
