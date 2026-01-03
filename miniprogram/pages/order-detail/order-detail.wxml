@@ -1,0 +1,89 @@
+<!--pages/order-detail/order-detail.wxml-->
+<!--订单详情页面-->
+
+<view class="container" wx:if="{{order}}">
+  <!-- 状态卡片 -->
+  <view class="status-card">
+    <text class="status-icon">{{order.status === 1 ? '✓' : '⏳'}}</text>
+    <text class="status-text">{{getStatusInfo(order.status).text}}</text>
+  </view>
+
+  <!-- 金额信息 -->
+  <view class="amount-card card">
+    <view class="amount-section">
+      <text class="amount-label">回收金额</text>
+      <view class="amount-value">
+        <text class="symbol">¥</text>
+        <text class="value">{{formatMoney(order.amount)}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 投递信息 -->
+  <view class="info-card card">
+    <view class="card-title">投递信息</view>
+    <view class="info-list">
+      <view class="info-item">
+        <text class="info-label">投递设备</text>
+        <text class="info-value">{{order.device_name}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">设备地址</text>
+        <text class="info-value">{{order.device_address}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">投递重量</text>
+        <text class="info-value">{{order.weight}} kg</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">回收单价</text>
+        <text class="info-value">¥{{formatMoney(order.unit_price)}}/kg</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">碳减排量</text>
+        <text class="info-value">{{order.carbon_reduction}} kg CO₂</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">获得积分</text>
+        <text class="info-value">+{{order.points_earned}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 订单信息 -->
+  <view class="info-card card">
+    <view class="card-title">订单信息</view>
+    <view class="info-list">
+      <view class="info-item" bindtap="copyOrderId">
+        <text class="info-label">订单编号</text>
+        <view class="info-value-wrap">
+          <text class="info-value">{{order.order_id}}</text>
+          <text class="copy-btn">复制</text>
+        </view>
+      </view>
+      <view class="info-item">
+        <text class="info-label">投递时间</text>
+        <text class="info-value">{{formatDate(order.created_at)}}</text>
+      </view>
+      <view class="info-item" wx:if="{{order.claim_time}}">
+        <text class="info-label">领取时间</text>
+        <text class="info-value">{{formatDate(order.claim_time)}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 衣物去向 -->
+  <view class="track-card card" bindtap="viewTrack">
+    <view class="track-content">
+      <text class="track-icon">📦</text>
+      <text class="track-text">查看衣物去向</text>
+    </view>
+    <text class="track-arrow">></text>
+  </view>
+</view>
+
+<!-- 加载状态 -->
+<view class="loading-wrap" wx:if="{{loading}}">
+  <text class="loading-text">加载中...</text>
+</view>
+

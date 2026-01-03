@@ -1,0 +1,82 @@
+<!--pages/orders/orders.wxml-->
+<!--订单列表页面-->
+
+<view class="container">
+  <!-- 状态筛选 -->
+  <view class="filter-bar">
+    <view class="filter-item {{currentStatus === null ? 'active' : ''}}" 
+          bindtap="switchStatus" data-status="{{null}}">
+      全部
+    </view>
+    <view class="filter-item {{currentStatus === 0 ? 'active' : ''}}" 
+          bindtap="switchStatus" data-status="{{0}}">
+      待领取
+    </view>
+    <view class="filter-item {{currentStatus === 1 ? 'active' : ''}}" 
+          bindtap="switchStatus" data-status="{{1}}">
+      已领取
+    </view>
+  </view>
+
+  <!-- 订单列表 -->
+  <view class="order-list" wx:if="{{orders.length > 0}}">
+    <view class="order-card card" 
+          wx:for="{{orders}}" 
+          wx:key="order_id"
+          bindtap="viewDetail"
+          data-id="{{item.order_id}}">
+      <!-- 订单头部 -->
+      <view class="order-header">
+        <text class="order-id">订单号: {{item.order_id}}</text>
+        <text class="order-status tag tag-{{getStatusInfo(item.status).type}}">
+          {{getStatusInfo(item.status).text}}
+        </text>
+      </view>
+      
+      <!-- 订单内容 -->
+      <view class="order-body">
+        <view class="order-info">
+          <text class="device-name">📍 {{item.device_name || '智能回收箱'}}</text>
+          <text class="order-time">{{formatDate(item.created_at)}}</text>
+        </view>
+        <view class="order-detail">
+          <view class="detail-item">
+            <text class="detail-label">重量</text>
+            <text class="detail-value">{{item.weight}} kg</text>
+          </view>
+          <view class="detail-item">
+            <text class="detail-label">金额</text>
+            <text class="detail-value amount">¥{{formatMoney(item.amount)}}</text>
+          </view>
+        </view>
+      </view>
+      
+      <!-- 订单底部 -->
+      <view class="order-footer">
+        <text class="carbon-text">🌱 减碳 {{item.carbon_reduction}} kg</text>
+        <text class="arrow">></text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty" wx:if="{{orders.length === 0 && !loading}}">
+    <text class="empty-icon">📋</text>
+    <text class="empty-text">暂无投递记录</text>
+    <text class="empty-tip">去附近回收箱投递衣物吧</text>
+    <navigator url="/pages/nearby/nearby" class="empty-btn btn btn-primary">
+      查看附近回收箱
+    </navigator>
+  </view>
+
+  <!-- 加载状态 -->
+  <view class="loading" wx:if="{{loading}}">
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <!-- 没有更多 -->
+  <view class="no-more" wx:if="{{orders.length > 0 && !hasMore}}">
+    <text>— 没有更多了 —</text>
+  </view>
+</view>
+

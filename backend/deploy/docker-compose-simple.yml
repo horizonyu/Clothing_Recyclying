@@ -1,0 +1,72 @@
+# 简化版 Docker Compose - 快速启动
+# 不包含 Nginx，适合开发测试或内网部署
+# 使用方法: docker-compose -f docker-compose-simple.yml up -d
+
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: clothing-recycle-api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=mysql+aiomysql://recycle:recycle123456@mysql:3306/clothing_recycle
+      - REDIS_URL=redis://redis:6379/0
+      - APP_ENV=production
+      - DEBUG=false
+    env_file:
+      - ../.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - app-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: clothing-recycle-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: clothing_recycle
+      MYSQL_USER: recycle
+      MYSQL_PASSWORD: recycle123456
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: clothing-recycle-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+

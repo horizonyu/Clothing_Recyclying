@@ -1,0 +1,37 @@
+# 智能旧衣回收箱 - Systemd 服务配置
+# 
+# 安装方法:
+# sudo cp clothing-recycle.service /etc/systemd/system/
+# sudo systemctl daemon-reload
+# sudo systemctl enable clothing-recycle
+# sudo systemctl start clothing-recycle
+
+[Unit]
+Description=Clothing Recycle API Service
+After=network.target mysql.service redis.service
+Wants=mysql.service redis.service
+
+[Service]
+Type=exec
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/Clothing_Recycle/backend
+Environment="PATH=/opt/Clothing_Recycle/backend/venv/bin"
+EnvironmentFile=/opt/Clothing_Recycle/backend/.env
+ExecStart=/opt/Clothing_Recycle/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 安全配置
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/Clothing_Recycle/backend/logs
+
+[Install]
+WantedBy=multi-user.target
+

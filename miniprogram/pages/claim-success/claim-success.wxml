@@ -1,0 +1,76 @@
+<!--pages/claim-success/claim-success.wxml-->
+<!--领取成功页面-->
+
+<view class="container">
+  <!-- 成功图标 -->
+  <view class="success-header">
+    <view class="success-icon">✓</view>
+    <text class="success-title">领取成功</text>
+    <text class="success-subtitle">感谢您为环保做出的贡献！</text>
+  </view>
+
+  <!-- 领取详情 -->
+  <view class="result-card card" wx:if="{{result}}">
+    <view class="amount-section">
+      <text class="amount-label">本次领取</text>
+      <view class="amount-value">
+        <text class="amount-symbol">¥</text>
+        <text class="amount-num">{{formatMoney(result.amount)}}</text>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+
+    <view class="info-grid">
+      <view class="info-item">
+        <text class="info-label">投递重量</text>
+        <text class="info-value">{{result.weight}} kg</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">碳减排量</text>
+        <text class="info-value">{{result.carbon_reduction}} kg</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">获得积分</text>
+        <text class="info-value">+{{result.points_earned}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">钱包余额</text>
+        <text class="info-value">¥{{formatMoney(result.wallet_balance)}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 环保成就 -->
+  <view class="achievement-card card">
+    <view class="achievement-header">
+      <text class="achievement-title">🏆 环保成就</text>
+    </view>
+    <view class="achievement-content">
+      <view class="achievement-item">
+        <text class="achievement-icon">🌳</text>
+        <text class="achievement-text">本次回收相当于种植了 {{treesPlanted}} 棵树</text>
+      </view>
+      <view class="achievement-item">
+        <text class="achievement-icon">💧</text>
+        <text class="achievement-text">节约了 {{waterSaved}} 升水资源</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="action-section">
+    <button class="btn btn-primary btn-block" bindtap="continueScan">继续扫码</button>
+    <button class="btn btn-secondary btn-block" bindtap="goToWallet">查看钱包</button>
+    <button class="btn-text" bindtap="goHome">返回首页</button>
+  </view>
+
+  <!-- 分享提示 -->
+  <view class="share-tip">
+    <button class="share-btn" open-type="share">
+      <text class="share-icon">📤</text>
+      <text>分享给好友，一起参与环保</text>
+    </button>
+  </view>
+</view>
+

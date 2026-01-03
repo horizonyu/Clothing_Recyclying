@@ -1,0 +1,88 @@
+{
+  "description": "智能旧衣回收箱小程序",
+  "packOptions": {
+    "ignore": [
+      {
+        "value": ".eslintrc.js",
+        "type": "file"
+      }
+    ],
+    "include": []
+  },
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "preloadBackgroundData": false,
+    "minified": true,
+    "newFeature": true,
+    "coverView": true,
+    "nodeModules": false,
+    "autoAudits": false,
+    "showShadowRootInWxmlPanel": true,
+    "scopeDataCheck": false,
+    "uglifyFileName": false,
+    "checkInvalidKey": true,
+    "checkSiteMap": true,
+    "uploadWithSourceMap": true,
+    "compileHotReLoad": false,
+    "lazyloadPlaceholderEnable": false,
+    "useMultiFrameRuntime": true,
+    "useApiHook": true,
+    "useApiHostProcess": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
+    "useIsolateContext": true,
+    "userConfirmedBundleSwitch": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "showES6CompileOption": false,
+    "minifyWXML": true,
+    "compileWorklet": false,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "2.25.4",
+  "appid": "wxfbed0761a410b950",
+  "projectname": "clothing-recycle",
+  "condition": {
+    "search": {
+      "list": []
+    },
+    "conversation": {
+      "list": []
+    },
+    "plugin": {
+      "list": []
+    },
+    "game": {
+      "list": []
+    },
+    "miniprogram": {
+      "list": [
+        {
+          "name": "扫码领取",
+          "pathName": "pages/scan/scan",
+          "query": ""
+        },
+        {
+          "name": "领取成功",
+          "pathName": "pages/claim-success/claim-success",
+          "query": "data=%7B%22order_id%22%3A%22TEST001%22%2C%22amount%22%3A1.05%2C%22weight%22%3A3.5%2C%22carbon_reduction%22%3A8.75%2C%22points_earned%22%3A88%2C%22wallet_balance%22%3A15.50%7D"
+        }
+      ]
+    }
+  },
+  "simulatorPluginLibVersion": {},
+  "editorSetting": {}
+}

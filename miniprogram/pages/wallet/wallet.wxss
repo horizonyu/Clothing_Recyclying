@@ -1,0 +1,150 @@
+/* pages/wallet/wallet.wxss */
+/* 钱包页面样式 */
+
+.container {
+  min-height: 100vh;
+  background: var(--bg-color);
+}
+
+/* ===== 余额卡片 ===== */
+.balance-card {
+  background: linear-gradient(135deg, #07C160 0%, #06AD56 100%);
+  padding: 60rpx 40rpx;
+  color: #fff;
+  position: relative;
+}
+
+.balance-header {
+  margin-bottom: 20rpx;
+}
+
+.balance-label {
+  font-size: 28rpx;
+  opacity: 0.9;
+}
+
+.balance-amount {
+  margin-bottom: 20rpx;
+}
+
+.amount-symbol {
+  font-size: 40rpx;
+  vertical-align: top;
+}
+
+.amount-value {
+  font-size: 80rpx;
+  font-weight: 600;
+  letter-spacing: -2rpx;
+}
+
+.frozen-info {
+  font-size: 24rpx;
+  opacity: 0.8;
+  margin-bottom: 30rpx;
+}
+
+.withdraw-btn {
+  position: absolute;
+  right: 40rpx;
+  bottom: 50rpx;
+  background: #fff;
+  color: var(--primary-color);
+  font-size: 28rpx;
+  font-weight: 500;
+  padding: 16rpx 48rpx;
+  border-radius: 40rpx;
+  border: none;
+}
+
+.withdraw-btn::after {
+  border: none;
+}
+
+/* ===== 交易记录 ===== */
+.records-section {
+  margin-top: 20rpx;
+  background: #fff;
+}
+
+.section-header {
+  padding: 30rpx;
+  border-bottom: 1rpx solid var(--border-color);
+}
+
+.section-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.records-list {
+  padding: 0 30rpx;
+}
+
+.record-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30rpx 0;
+  border-bottom: 1rpx solid var(--border-color);
+}
+
+.record-item:last-child {
+  border-bottom: none;
+}
+
+.record-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.record-type {
+  font-size: 30rpx;
+  color: var(--text-primary);
+}
+
+.record-time {
+  font-size: 24rpx;
+  color: var(--text-placeholder);
+  margin-top: 8rpx;
+}
+
+.record-amount {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.record-amount.income {
+  color: var(--primary-color);
+}
+
+.record-amount.expense {
+  color: var(--text-primary);
+}
+
+/* ===== 空状态 ===== */
+.empty {
+  padding: 100rpx 0;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  display: block;
+  margin-bottom: 20rpx;
+}
+
+.empty-text {
+  font-size: 28rpx;
+  color: var(--text-secondary);
+}
+
+/* ===== 没有更多 ===== */
+.no-more {
+  text-align: center;
+  padding: 30rpx;
+  font-size: 24rpx;
+  color: var(--text-placeholder);
+}
+

@@ -1,0 +1,112 @@
+<!--pages/profile/profile.wxml-->
+<!--个人中心页面-->
+
+<view class="container">
+  <!-- 用户信息卡片 -->
+  <view class="user-card">
+    <view class="user-info" wx:if="{{isLogin}}" bindtap="goToWallet">
+      <image class="avatar" src="{{userInfo.avatar_url || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+      <view class="user-detail">
+        <text class="nickname">{{userInfo.nickname || '回收达人'}}</text>
+        <text class="user-id">ID: {{userInfo.user_id}}</text>
+      </view>
+      <text class="arrow">></text>
+    </view>
+    
+    <view class="user-info login-prompt" wx:else bindtap="handleLogin">
+      <image class="avatar" src="/images/default-avatar.png" mode="aspectFill"></image>
+      <view class="user-detail">
+        <text class="nickname">点击登录</text>
+        <text class="login-tip">登录后查看更多信息</text>
+      </view>
+      <text class="arrow">></text>
+    </view>
+  </view>
+
+  <!-- 资产信息 -->
+  <view class="asset-card card" wx:if="{{isLogin}}">
+    <view class="asset-grid">
+      <view class="asset-item" bindtap="goToWallet">
+        <text class="asset-value">¥{{formatMoney(wallet.balance)}}</text>
+        <text class="asset-label">钱包余额</text>
+      </view>
+      <view class="asset-divider"></view>
+      <view class="asset-item" bindtap="goToWallet">
+        <text class="asset-value">{{wallet.points}}</text>
+        <text class="asset-label">积分</text>
+      </view>
+    </view>
+    <view class="asset-actions">
+      <button class="asset-btn" bindtap="goToWithdraw">提现</button>
+      <button class="asset-btn" bindtap="goToWallet">钱包明细</button>
+    </view>
+  </view>
+
+  <!-- 环保数据 -->
+  <view class="eco-card card" wx:if="{{isLogin}}">
+    <view class="card-title">🌱 我的环保贡献</view>
+    <view class="eco-grid">
+      <view class="eco-item">
+        <text class="eco-value">{{stats.totalCount}}</text>
+        <text class="eco-label">投递次数</text>
+      </view>
+      <view class="eco-item">
+        <text class="eco-value">{{stats.totalWeight}}</text>
+        <text class="eco-label">回收重量(kg)</text>
+      </view>
+      <view class="eco-item">
+        <text class="eco-value">{{stats.totalCarbon}}</text>
+        <text class="eco-label">减碳量(kg)</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 功能菜单 -->
+  <view class="menu-card card">
+    <view class="menu-item" bindtap="goToOrders">
+      <text class="menu-icon">📋</text>
+      <text class="menu-text">投递记录</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item" bindtap="goToWallet">
+      <text class="menu-icon">💰</text>
+      <text class="menu-text">我的钱包</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item">
+      <text class="menu-icon">🎁</text>
+      <text class="menu-text">积分商城</text>
+      <text class="menu-tag">敬请期待</text>
+      <text class="menu-arrow">></text>
+    </view>
+  </view>
+
+  <view class="menu-card card">
+    <view class="menu-item" bindtap="contactService">
+      <text class="menu-icon">📞</text>
+      <text class="menu-text">联系客服</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item" bindtap="showAbout">
+      <text class="menu-icon">ℹ️</text>
+      <text class="menu-text">关于我们</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <button class="menu-item feedback-btn" open-type="feedback">
+      <text class="menu-icon">💬</text>
+      <text class="menu-text">意见反馈</text>
+      <text class="menu-arrow">></text>
+    </button>
+  </view>
+
+  <!-- 退出登录 -->
+  <view class="logout-section" wx:if="{{isLogin}}">
+    <button class="logout-btn" bindtap="logout">退出登录</button>
+  </view>
+
+  <!-- 版本号 -->
+  <view class="version">
+    <text>版本 1.0.0</text>
+  </view>
+</view>
+

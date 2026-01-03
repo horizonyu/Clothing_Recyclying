@@ -1,0 +1,8 @@
+{
+  "usingComponents": {},
+  "navigationBarTitleText": "我的钱包",
+  "navigationBarBackgroundColor": "#07C160",
+  "navigationBarTextStyle": "white",
+  "enablePullDownRefresh": true
+}
+

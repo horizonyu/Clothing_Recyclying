@@ -1,0 +1,113 @@
+<!--pages/scan/scan.wxml-->
+<!--扫码页面-->
+
+<view class="container">
+  <!-- 扫码区域 -->
+  <view class="scan-area">
+    <view class="scan-header">
+      <text class="scan-title">扫码领取</text>
+      <text class="scan-subtitle">扫描回收箱屏幕上的二维码</text>
+    </view>
+    
+    <view class="scan-box">
+      <image class="scan-frame" src="/images/scan-frame.png" mode="aspectFit"></image>
+      <view class="scan-tips">
+        <text>将二维码放入框内</text>
+        <text>即可自动扫描</text>
+      </view>
+    </view>
+    
+    <!-- 扫码按钮 -->
+    <button class="scan-btn btn btn-primary btn-block" bindtap="startScan" loading="{{scanning}}">
+      {{scanning ? '扫描中...' : '开始扫码'}}
+    </button>
+  </view>
+
+  <!-- 使用说明 -->
+  <view class="instructions card">
+    <view class="card-title">📖 使用说明</view>
+    <view class="instruction-list">
+      <view class="instruction-item">
+        <text class="instruction-num">1</text>
+        <text class="instruction-text">在回收箱投递衣物后，屏幕会显示二维码</text>
+      </view>
+      <view class="instruction-item">
+        <text class="instruction-num">2</text>
+        <text class="instruction-text">点击"开始扫码"按钮，扫描屏幕二维码</text>
+      </view>
+      <view class="instruction-item">
+        <text class="instruction-num">3</text>
+        <text class="instruction-text">确认信息后，金额将自动到账</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 温馨提示 -->
+  <view class="notice card">
+    <view class="card-title">💡 温馨提示</view>
+    <view class="notice-content">
+      <text>• 二维码有效期为10分钟，请及时扫码</text>
+      <text>• 每个二维码只能领取一次</text>
+      <text>• 如遇问题，请联系客服：400-XXX-XXXX</text>
+    </view>
+  </view>
+</view>
+
+<!-- 领取确认弹窗 -->
+<view class="modal-mask" wx:if="{{showClaimModal}}" bindtap="closeModal" catchtouchmove="preventTouchMove">
+  <view class="modal-content" catchtap="preventTouchMove">
+    <!-- 弹窗头部 -->
+    <view class="modal-header">
+      <text class="modal-title">投递详情</text>
+      <text class="modal-close" bindtap="closeModal">×</text>
+    </view>
+    
+    <!-- 弹窗内容 -->
+    <view class="modal-body">
+      <!-- 设备信息 -->
+      <view class="info-section">
+        <view class="device-name">📍 {{orderInfo.device_name}}</view>
+      </view>
+      
+      <!-- 投递信息 -->
+      <view class="info-list">
+        <view class="info-item">
+          <text class="info-label">投递重量</text>
+          <text class="info-value">{{formatWeight(orderInfo.weight)}} kg</text>
+        </view>
+        <view class="info-item">
+          <text class="info-label">回收单价</text>
+          <text class="info-value">¥{{formatMoney(orderInfo.unit_price)}}/kg</text>
+        </view>
+        <view class="info-item highlight">
+          <text class="info-label">可领金额</text>
+          <text class="info-value amount">¥{{formatMoney(orderInfo.amount)}}</text>
+        </view>
+      </view>
+      
+      <!-- 环保贡献 -->
+      <view class="eco-section">
+        <view class="eco-title">🌱 您的环保贡献</view>
+        <view class="eco-grid">
+          <view class="eco-item">
+            <text class="eco-value">{{formatCarbon(orderInfo.carbon_reduction)}}</text>
+            <text class="eco-label">碳减排(kg CO₂)</text>
+          </view>
+          <view class="eco-item">
+            <text class="eco-value">{{orderInfo.points}}</text>
+            <text class="eco-label">获得积分</text>
+          </view>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 弹窗底部 -->
+    <view class="modal-footer">
+      <button class="btn btn-secondary" bindtap="closeModal">取消</button>
+      <button class="btn btn-primary" bindtap="confirmClaim" loading="{{claiming}}">
+        {{claiming ? '领取中...' : '确认领取'}}
+      </button>
+    </view>
+  </view>
+</view>
+

@@ -1,0 +1,122 @@
+<!--pages/index/index.wxml-->
+<!--首页-->
+
+<view class="container">
+  <!-- 顶部用户信息卡片 -->
+  <view class="user-card card">
+    <view class="user-info" wx:if="{{isLogin}}">
+      <image class="avatar" src="{{userInfo.avatar_url || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+      <view class="user-detail">
+        <text class="nickname">{{userInfo.nickname || '回收达人'}}</text>
+        <text class="user-id">ID: {{userInfo.user_id}}</text>
+      </view>
+    </view>
+    <view class="user-info" wx:else>
+      <image class="avatar" src="/images/default-avatar.png" mode="aspectFill"></image>
+      <view class="user-detail">
+        <text class="nickname">未登录</text>
+        <text class="login-tip" bindtap="handleLogin">点击登录，开始环保之旅</text>
+      </view>
+    </view>
+    
+    <!-- 钱包余额 -->
+    <view class="wallet-section" bindtap="goToWallet">
+      <view class="wallet-label">钱包余额</view>
+      <view class="wallet-amount">
+        <text class="amount-symbol">¥</text>
+        <text class="amount-value">{{balance}}</text>
+      </view>
+      <view class="wallet-arrow">></view>
+    </view>
+  </view>
+
+  <!-- 数据统计卡片 -->
+  <view class="stats-card card">
+    <view class="card-title">我的环保数据</view>
+    <view class="stats-grid">
+      <view class="stats-item">
+        <text class="stats-value">{{stats.totalCount}}</text>
+        <text class="stats-label">投递次数</text>
+      </view>
+      <view class="stats-item">
+        <text class="stats-value">{{stats.totalWeight}}</text>
+        <text class="stats-label">回收重量(kg)</text>
+      </view>
+      <view class="stats-item">
+        <text class="stats-value">{{stats.totalCarbon}}</text>
+        <text class="stats-label">碳减排(kg)</text>
+      </view>
+      <view class="stats-item">
+        <text class="stats-value amount">{{stats.totalAmount}}</text>
+        <text class="stats-label">累计收益(元)</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 快捷操作 -->
+  <view class="action-card card">
+    <view class="action-grid">
+      <view class="action-item" bindtap="goToScan">
+        <view class="action-icon scan-icon">
+          <text class="iconfont">📷</text>
+        </view>
+        <text class="action-text">扫码领取</text>
+      </view>
+      <view class="action-item" bindtap="goToNearby">
+        <view class="action-icon location-icon">
+          <text class="iconfont">📍</text>
+        </view>
+        <text class="action-text">附近回收箱</text>
+      </view>
+      <view class="action-item" bindtap="goToOrders">
+        <view class="action-icon order-icon">
+          <text class="iconfont">📋</text>
+        </view>
+        <text class="action-text">投递记录</text>
+      </view>
+      <view class="action-item" bindtap="goToWallet">
+        <view class="action-icon wallet-icon">
+          <text class="iconfont">💰</text>
+        </view>
+        <text class="action-text">我的钱包</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 使用指南 -->
+  <view class="guide-card card">
+    <view class="card-title">使用指南</view>
+    <view class="guide-steps">
+      <view class="guide-step">
+        <view class="step-number">1</view>
+        <view class="step-content">
+          <text class="step-title">找到回收箱</text>
+          <text class="step-desc">在小区或公共场所找到智能回收箱</text>
+        </view>
+      </view>
+      <view class="guide-step">
+        <view class="step-number">2</view>
+        <view class="step-content">
+          <text class="step-title">投递衣物</text>
+          <text class="step-desc">按下开门按钮，将旧衣物投入箱内</text>
+        </view>
+      </view>
+      <view class="guide-step">
+        <view class="step-number">3</view>
+        <view class="step-content">
+          <text class="step-title">扫码领取</text>
+          <text class="step-desc">扫描屏幕二维码，领取回收金额</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 环保小贴士 -->
+  <view class="tips-card card">
+    <view class="card-title">♻️ 环保小贴士</view>
+    <view class="tips-content">
+      <text>每回收1kg旧衣物，约减少2.5kg碳排放，相当于一棵树一天的吸碳量。感谢您为环保做出的贡献！</text>
+    </view>
+  </view>
+</view>
+

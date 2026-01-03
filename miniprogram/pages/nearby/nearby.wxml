@@ -1,0 +1,84 @@
+<!--pages/nearby/nearby.wxml-->
+<!--附近回收箱页面-->
+
+<view class="container">
+  <!-- 地图视图 -->
+  <view class="map-container" wx:if="{{!showList}}">
+    <map class="map"
+         latitude="{{latitude}}"
+         longitude="{{longitude}}"
+         markers="{{markers}}"
+         show-location
+         scale="15"
+         bindmarkertap="onMarkerTap">
+    </map>
+    
+    <!-- 刷新按钮 -->
+    <view class="map-controls">
+      <view class="control-btn" bindtap="refreshLocation">
+        <text>📍</text>
+      </view>
+      <view class="control-btn" bindtap="toggleView">
+        <text>📋</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 列表视图 -->
+  <view class="list-container" wx:if="{{showList}}">
+    <!-- 顶部操作栏 -->
+    <view class="list-header">
+      <view class="header-title">
+        <text class="title">附近回收箱</text>
+        <text class="count">共{{devices.length}}个</text>
+      </view>
+      <view class="header-actions">
+        <view class="action-btn" bindtap="refreshLocation">
+          <text>刷新</text>
+        </view>
+        <view class="action-btn" bindtap="toggleView">
+          <text>地图</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 设备列表 -->
+    <view class="device-list" wx:if="{{devices.length > 0}}">
+      <view class="device-item" 
+            wx:for="{{devices}}" 
+            wx:key="device_id"
+            data-index="{{index}}">
+        <view class="device-info" bindtap="onDeviceTap" data-index="{{index}}">
+          <view class="device-icon">📦</view>
+          <view class="device-detail">
+            <text class="device-name">{{item.name}}</text>
+            <text class="device-address">{{item.address}}</text>
+            <view class="device-tags">
+              <text class="tag {{item.status === 'online' ? 'tag-success' : 'tag-danger'}}">
+                {{item.status === 'online' ? '在线' : '离线'}}
+              </text>
+              <text class="device-distance">{{formatDistance(item.distance)}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="device-action" bindtap="navigateTo" data-index="{{index}}">
+          <text class="action-icon">🧭</text>
+          <text class="action-text">导航</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view class="empty" wx:if="{{devices.length === 0 && !loading}}">
+      <text class="empty-icon">📍</text>
+      <text class="empty-text">附近暂无回收箱</text>
+      <text class="empty-tip">请尝试扩大搜索范围</text>
+    </view>
+
+    <!-- 加载状态 -->
+    <view class="loading" wx:if="{{loading}}">
+      <text class="loading-text">定位中...</text>
+    </view>
+  </view>
+</view>
+

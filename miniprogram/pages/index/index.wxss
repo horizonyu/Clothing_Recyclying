@@ -1,0 +1,232 @@
+/* pages/index/index.wxss */
+/* 首页样式 */
+
+.container {
+  padding: 20rpx;
+  padding-bottom: 40rpx;
+}
+
+/* ===== 用户卡片 ===== */
+.user-card {
+  background: linear-gradient(135deg, #07C160 0%, #06AD56 100%);
+  color: #fff;
+  padding: 40rpx;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 30rpx;
+}
+
+.avatar {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  border: 4rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.user-detail {
+  margin-left: 24rpx;
+  flex: 1;
+}
+
+.nickname {
+  font-size: 36rpx;
+  font-weight: 600;
+  display: block;
+}
+
+.user-id {
+  font-size: 24rpx;
+  opacity: 0.8;
+  margin-top: 8rpx;
+  display: block;
+}
+
+.login-tip {
+  font-size: 26rpx;
+  opacity: 0.9;
+  margin-top: 8rpx;
+  display: block;
+}
+
+.wallet-section {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12rpx;
+  padding: 24rpx;
+}
+
+.wallet-label {
+  font-size: 26rpx;
+  opacity: 0.9;
+}
+
+.wallet-amount {
+  flex: 1;
+  text-align: right;
+  margin-right: 16rpx;
+}
+
+.amount-symbol {
+  font-size: 28rpx;
+}
+
+.amount-value {
+  font-size: 48rpx;
+  font-weight: 600;
+}
+
+.wallet-arrow {
+  font-size: 28rpx;
+  opacity: 0.7;
+}
+
+/* ===== 统计卡片 ===== */
+.stats-card {
+  margin-top: 20rpx;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20rpx;
+}
+
+.stats-item {
+  text-align: center;
+}
+
+.stats-value {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: var(--primary-color);
+  display: block;
+}
+
+.stats-value.amount {
+  color: #FA5151;
+}
+
+.stats-label {
+  font-size: 22rpx;
+  color: var(--text-secondary);
+  margin-top: 8rpx;
+  display: block;
+}
+
+/* ===== 操作卡片 ===== */
+.action-card {
+  margin-top: 20rpx;
+  padding: 30rpx 20rpx;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20rpx;
+}
+
+.action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.action-icon {
+  width: 90rpx;
+  height: 90rpx;
+  border-radius: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+}
+
+.scan-icon {
+  background: #E8F8EE;
+}
+
+.location-icon {
+  background: #E3F2FD;
+}
+
+.order-icon {
+  background: #FFF3E0;
+}
+
+.wallet-icon {
+  background: #FFEBEE;
+}
+
+.action-text {
+  font-size: 24rpx;
+  color: var(--text-secondary);
+  margin-top: 12rpx;
+}
+
+/* ===== 指南卡片 ===== */
+.guide-card {
+  margin-top: 20rpx;
+}
+
+.guide-steps {
+  margin-top: 10rpx;
+}
+
+.guide-step {
+  display: flex;
+  align-items: flex-start;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid var(--border-color);
+}
+
+.guide-step:last-child {
+  border-bottom: none;
+}
+
+.step-number {
+  width: 48rpx;
+  height: 48rpx;
+  background: var(--primary-color);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.step-content {
+  margin-left: 20rpx;
+}
+
+.step-title {
+  font-size: 30rpx;
+  font-weight: 500;
+  display: block;
+}
+
+.step-desc {
+  font-size: 26rpx;
+  color: var(--text-secondary);
+  margin-top: 8rpx;
+  display: block;
+}
+
+/* ===== 提示卡片 ===== */
+.tips-card {
+  margin-top: 20rpx;
+  background: var(--primary-light);
+}
+
+.tips-content {
+  font-size: 26rpx;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+

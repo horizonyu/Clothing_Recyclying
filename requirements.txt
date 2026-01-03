@@ -1,0 +1,60 @@
+# 智能旧衣回收箱系统 - Python后端依赖
+
+# Web框架
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+python-multipart==0.0.6
+
+# 数据库
+sqlalchemy==2.0.25
+aiomysql==0.2.0
+redis==5.0.1
+pymongo==4.6.1
+
+# MQTT/IoT
+paho-mqtt==1.6.1
+emqx-extension-sdk==0.0.3
+
+# 认证与安全
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+cryptography==41.0.7
+
+# 支付与第三方
+wechatpy==1.8.18
+alipay-sdk-python==3.6.885
+
+# AI/机器学习 (衣物识别)
+tensorflow==2.15.0
+opencv-python==4.9.0.80
+pillow==10.2.0
+numpy==1.26.3
+
+# 任务队列
+celery==5.3.4
+kombu==5.3.4
+
+# 工具库
+httpx==0.26.0
+python-dateutil==2.8.2
+loguru==0.7.2
+pyyaml==6.0.1
+
+# 阿里云OSS (文件存储)
+oss2==2.18.4
+
+# 短信服务
+alibabacloud-dysmsapi20170525==2.0.24
+
+# 测试
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0
+
+# 代码质量
+black==23.12.1
+isort==5.13.2
+flake8==7.0.0
+mypy==1.8.0
+

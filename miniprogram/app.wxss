@@ -1,0 +1,227 @@
+/**
+ * 全局样式文件
+ * 这里定义的样式会应用到所有页面
+ */
+
+/* ==================== 全局变量 ==================== */
+page {
+  --primary-color: #07C160;      /* 主题绿色 */
+  --primary-light: #E8F8EE;      /* 浅绿背景 */
+  --warning-color: #FF9500;      /* 警告橙色 */
+  --danger-color: #FA5151;       /* 危险红色 */
+  --text-primary: #333333;       /* 主要文字 */
+  --text-secondary: #666666;     /* 次要文字 */
+  --text-placeholder: #999999;   /* 占位文字 */
+  --border-color: #E5E5E5;       /* 边框颜色 */
+  --bg-color: #F6F6F6;           /* 页面背景 */
+  --white: #FFFFFF;              /* 白色 */
+  
+  background-color: var(--bg-color);
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 28rpx;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* ==================== 通用布局 ==================== */
+.container {
+  padding: 30rpx;
+  box-sizing: border-box;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+/* ==================== 卡片样式 ==================== */
+.card {
+  background-color: var(--white);
+  border-radius: 16rpx;
+  padding: 30rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
+.card-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 20rpx;
+}
+
+/* ==================== 按钮样式 ==================== */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  border-radius: 44rpx;
+  font-size: 32rpx;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: var(--white);
+}
+
+.btn-primary:active {
+  background-color: #06AD56;
+}
+
+.btn-secondary {
+  background-color: var(--white);
+  color: var(--primary-color);
+  border: 2rpx solid var(--primary-color);
+}
+
+.btn-secondary:active {
+  background-color: var(--primary-light);
+}
+
+.btn-disabled {
+  background-color: #CCCCCC;
+  color: var(--white);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ==================== 列表样式 ==================== */
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 30rpx;
+  background-color: var(--white);
+  border-bottom: 1rpx solid var(--border-color);
+}
+
+.list-item:last-child {
+  border-bottom: none;
+}
+
+.list-item-label {
+  color: var(--text-secondary);
+  font-size: 28rpx;
+}
+
+.list-item-value {
+  color: var(--text-primary);
+  font-size: 28rpx;
+}
+
+/* ==================== 金额样式 ==================== */
+.amount {
+  color: var(--danger-color);
+  font-weight: 600;
+}
+
+.amount-large {
+  font-size: 48rpx;
+}
+
+.amount-symbol {
+  font-size: 28rpx;
+  margin-right: 4rpx;
+}
+
+/* ==================== 状态标签 ==================== */
+.tag {
+  display: inline-block;
+  padding: 4rpx 16rpx;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+}
+
+.tag-success {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.tag-warning {
+  background-color: #FFF3E0;
+  color: var(--warning-color);
+}
+
+.tag-danger {
+  background-color: #FFEBEE;
+  color: var(--danger-color);
+}
+
+/* ==================== 空状态 ==================== */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.empty-image {
+  width: 200rpx;
+  height: 200rpx;
+  margin-bottom: 30rpx;
+}
+
+.empty-text {
+  color: var(--text-placeholder);
+  font-size: 28rpx;
+}
+
+/* ==================== 加载状态 ==================== */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30rpx;
+}
+
+.loading-text {
+  color: var(--text-placeholder);
+  font-size: 26rpx;
+  margin-left: 10rpx;
+}
+
+/* ==================== 安全区域 ==================== */
+.safe-area-bottom {
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ==================== 动画 ==================== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+

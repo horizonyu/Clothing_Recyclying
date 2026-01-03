@@ -1,0 +1,63 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/scan/scan",
+    "pages/claim-success/claim-success",
+    "pages/orders/orders",
+    "pages/order-detail/order-detail",
+    "pages/wallet/wallet",
+    "pages/withdraw/withdraw",
+    "pages/profile/profile",
+    "pages/nearby/nearby"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#07C160",
+    "navigationBarTitleText": "智能旧衣回收",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F6F6F6",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#07C160",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "images/tab/home.png",
+        "selectedIconPath": "images/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/scan/scan",
+        "text": "扫码",
+        "iconPath": "images/tab/scan.png",
+        "selectedIconPath": "images/tab/scan-active.png"
+      },
+      {
+        "pagePath": "pages/orders/orders",
+        "text": "记录",
+        "iconPath": "images/tab/order.png",
+        "selectedIconPath": "images/tab/order-active.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的",
+        "iconPath": "images/tab/user.png",
+        "selectedIconPath": "images/tab/user-active.png"
+      }
+    ]
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "您的位置信息将用于查找附近的回收箱"
+    }
+  },
+  "requiredPrivateInfos": [
+    "getLocation"
+  ],
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}
+

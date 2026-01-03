@@ -1,0 +1,151 @@
+/* pages/order-detail/order-detail.wxss */
+/* 订单详情页面样式 */
+
+.container {
+  padding: 0 0 40rpx;
+}
+
+/* ===== 状态卡片 ===== */
+.status-card {
+  background: linear-gradient(135deg, #07C160 0%, #06AD56 100%);
+  padding: 60rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #fff;
+}
+
+.status-icon {
+  width: 100rpx;
+  height: 100rpx;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 50rpx;
+  margin-bottom: 20rpx;
+}
+
+.status-text {
+  font-size: 36rpx;
+  font-weight: 600;
+}
+
+/* ===== 金额卡片 ===== */
+.amount-card {
+  margin: -30rpx 20rpx 20rpx;
+  position: relative;
+  z-index: 10;
+}
+
+.amount-section {
+  text-align: center;
+  padding: 30rpx 0;
+}
+
+.amount-label {
+  font-size: 28rpx;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 16rpx;
+}
+
+.amount-value {
+  color: #FA5151;
+}
+
+.amount-value .symbol {
+  font-size: 32rpx;
+}
+
+.amount-value .value {
+  font-size: 60rpx;
+  font-weight: 600;
+}
+
+/* ===== 信息卡片 ===== */
+.info-card {
+  margin: 0 20rpx 20rpx;
+}
+
+.info-list {
+  margin-top: 20rpx;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid var(--border-color);
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-size: 28rpx;
+  color: var(--text-secondary);
+}
+
+.info-value {
+  font-size: 28rpx;
+  color: var(--text-primary);
+  text-align: right;
+  max-width: 60%;
+}
+
+.info-value-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.copy-btn {
+  font-size: 24rpx;
+  color: var(--primary-color);
+  margin-left: 16rpx;
+}
+
+/* ===== 去向追踪 ===== */
+.track-card {
+  margin: 0 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.track-content {
+  display: flex;
+  align-items: center;
+}
+
+.track-icon {
+  font-size: 40rpx;
+  margin-right: 16rpx;
+}
+
+.track-text {
+  font-size: 30rpx;
+  color: var(--text-primary);
+}
+
+.track-arrow {
+  font-size: 28rpx;
+  color: var(--text-placeholder);
+}
+
+/* ===== 加载状态 ===== */
+.loading-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 60vh;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: var(--text-secondary);
+}
+

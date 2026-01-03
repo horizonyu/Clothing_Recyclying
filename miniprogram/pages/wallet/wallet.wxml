@@ -1,0 +1,55 @@
+<!--pages/wallet/wallet.wxml-->
+<!--钱包页面-->
+
+<view class="container">
+  <!-- 余额卡片 -->
+  <view class="balance-card">
+    <view class="balance-header">
+      <text class="balance-label">账户余额(元)</text>
+    </view>
+    <view class="balance-amount">
+      <text class="amount-symbol">¥</text>
+      <text class="amount-value">{{formatMoney(balance)}}</text>
+    </view>
+    <view class="frozen-info" wx:if="{{frozenBalance > 0}}">
+      <text>冻结金额: ¥{{formatMoney(frozenBalance)}}</text>
+    </view>
+    <button class="withdraw-btn" bindtap="goToWithdraw">提现</button>
+  </view>
+
+  <!-- 交易记录 -->
+  <view class="records-section">
+    <view class="section-header">
+      <text class="section-title">交易记录</text>
+    </view>
+
+    <view class="records-list" wx:if="{{records.length > 0}}">
+      <view class="record-item" wx:for="{{records}}" wx:key="id">
+        <view class="record-info">
+          <text class="record-type">{{getTypeText(item.type)}}</text>
+          <text class="record-time">{{formatDate(item.created_at)}}</text>
+        </view>
+        <view class="record-amount {{item.type === 'income' || item.type === 'refund' ? 'income' : 'expense'}}">
+          {{item.type === 'income' || item.type === 'refund' ? '+' : '-'}}¥{{formatMoney(item.amount)}}
+        </view>
+      </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view class="empty" wx:if="{{records.length === 0 && !loading}}">
+      <text class="empty-icon">💰</text>
+      <text class="empty-text">暂无交易记录</text>
+    </view>
+
+    <!-- 加载状态 -->
+    <view class="loading" wx:if="{{loading}}">
+      <text class="loading-text">加载中...</text>
+    </view>
+
+    <!-- 没有更多 -->
+    <view class="no-more" wx:if="{{records.length > 0 && !hasMore}}">
+      <text>— 没有更多了 —</text>
+    </view>
+  </view>
+</view>
+

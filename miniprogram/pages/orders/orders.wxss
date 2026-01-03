@@ -1,0 +1,180 @@
+/* pages/orders/orders.wxss */
+/* 订单列表页面样式 */
+
+.container {
+  padding-bottom: 40rpx;
+}
+
+/* ===== 筛选栏 ===== */
+.filter-bar {
+  display: flex;
+  background: #fff;
+  padding: 20rpx 30rpx;
+  border-bottom: 1rpx solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.filter-item {
+  flex: 1;
+  text-align: center;
+  font-size: 28rpx;
+  color: var(--text-secondary);
+  padding: 16rpx 0;
+  position: relative;
+}
+
+.filter-item.active {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.filter-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40rpx;
+  height: 4rpx;
+  background: var(--primary-color);
+  border-radius: 2rpx;
+}
+
+/* ===== 订单列表 ===== */
+.order-list {
+  padding: 20rpx;
+}
+
+.order-card {
+  margin-bottom: 20rpx;
+  padding: 0;
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24rpx 30rpx;
+  border-bottom: 1rpx solid var(--border-color);
+}
+
+.order-id {
+  font-size: 24rpx;
+  color: var(--text-secondary);
+}
+
+.order-status {
+  font-size: 24rpx;
+}
+
+.order-body {
+  padding: 24rpx 30rpx;
+}
+
+.order-info {
+  margin-bottom: 20rpx;
+}
+
+.device-name {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: block;
+}
+
+.order-time {
+  font-size: 24rpx;
+  color: var(--text-placeholder);
+  margin-top: 8rpx;
+  display: block;
+}
+
+.order-detail {
+  display: flex;
+  background: var(--bg-color);
+  border-radius: 12rpx;
+  padding: 20rpx;
+}
+
+.detail-item {
+  flex: 1;
+  text-align: center;
+}
+
+.detail-label {
+  font-size: 24rpx;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.detail-value {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.detail-value.amount {
+  color: #FA5151;
+}
+
+.order-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 30rpx;
+  background: var(--primary-light);
+  border-radius: 0 0 16rpx 16rpx;
+}
+
+.carbon-text {
+  font-size: 26rpx;
+  color: var(--primary-color);
+}
+
+.arrow {
+  font-size: 28rpx;
+  color: var(--text-placeholder);
+}
+
+/* ===== 空状态 ===== */
+.empty {
+  padding: 100rpx 60rpx;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 100rpx;
+  display: block;
+  margin-bottom: 30rpx;
+}
+
+.empty-text {
+  font-size: 32rpx;
+  color: var(--text-secondary);
+  display: block;
+}
+
+.empty-tip {
+  font-size: 26rpx;
+  color: var(--text-placeholder);
+  margin-top: 16rpx;
+  display: block;
+}
+
+.empty-btn {
+  margin-top: 40rpx;
+  display: inline-block;
+  padding: 0 60rpx;
+}
+
+/* ===== 没有更多 ===== */
+.no-more {
+  text-align: center;
+  padding: 30rpx;
+  font-size: 24rpx;
+  color: var(--text-placeholder);
+}
+

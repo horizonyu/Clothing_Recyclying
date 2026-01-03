@@ -1,0 +1,173 @@
+/* pages/withdraw/withdraw.wxss */
+/* 提现页面样式 */
+
+.container {
+  padding: 30rpx;
+  padding-bottom: 150rpx;
+}
+
+/* ===== 可提现金额 ===== */
+.balance-info {
+  background: linear-gradient(135deg, #07C160 0%, #06AD56 100%);
+  border-radius: 16rpx;
+  padding: 40rpx;
+  color: #fff;
+  margin-bottom: 24rpx;
+}
+
+.balance-label {
+  font-size: 28rpx;
+  opacity: 0.9;
+  display: block;
+  margin-bottom: 16rpx;
+}
+
+.balance-value {
+  font-size: 60rpx;
+  font-weight: 600;
+}
+
+/* ===== 金额输入 ===== */
+.amount-card {
+  margin-bottom: 24rpx;
+}
+
+.amount-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.amount-label {
+  font-size: 30rpx;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.withdraw-all {
+  font-size: 26rpx;
+  color: var(--primary-color);
+}
+
+.amount-input-wrap {
+  display: flex;
+  align-items: center;
+  border-bottom: 2rpx solid var(--border-color);
+  padding-bottom: 20rpx;
+}
+
+.amount-symbol {
+  font-size: 48rpx;
+  color: var(--text-primary);
+  margin-right: 16rpx;
+}
+
+.amount-input {
+  flex: 1;
+  font-size: 60rpx;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.amount-input::placeholder {
+  font-size: 36rpx;
+  font-weight: normal;
+  color: var(--text-placeholder);
+}
+
+.amount-tips {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: var(--text-secondary);
+}
+
+/* ===== 提现方式 ===== */
+.channel-card {
+  margin-bottom: 24rpx;
+}
+
+.channel-list {
+  margin-top: 16rpx;
+}
+
+.channel-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx;
+  background: var(--bg-color);
+  border-radius: 12rpx;
+  border: 2rpx solid transparent;
+}
+
+.channel-item.active {
+  background: var(--primary-light);
+  border-color: var(--primary-color);
+}
+
+.channel-icon {
+  font-size: 48rpx;
+  margin-right: 20rpx;
+}
+
+.channel-info {
+  flex: 1;
+}
+
+.channel-name {
+  font-size: 30rpx;
+  color: var(--text-primary);
+  display: block;
+}
+
+.channel-desc {
+  font-size: 24rpx;
+  color: var(--text-secondary);
+  margin-top: 4rpx;
+  display: block;
+}
+
+.channel-check {
+  width: 40rpx;
+  height: 40rpx;
+  background: var(--primary-color);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+}
+
+/* ===== 提现说明 ===== */
+.tips-card {
+  background: #FFF8E1;
+}
+
+.tips-content {
+  margin-top: 16rpx;
+}
+
+.tips-content text {
+  display: block;
+  font-size: 26rpx;
+  color: #F57C00;
+  line-height: 1.8;
+}
+
+/* ===== 提交按钮 ===== */
+.submit-section {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20rpx 30rpx;
+  background: #fff;
+  box-shadow: 0 -2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.submit-section .btn {
+  margin-bottom: constant(safe-area-inset-bottom);
+  margin-bottom: env(safe-area-inset-bottom);
+}
+

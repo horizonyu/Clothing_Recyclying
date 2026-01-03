@@ -1,0 +1,67 @@
+<!--pages/withdraw/withdraw.wxml-->
+<!--提现页面-->
+
+<view class="container">
+  <!-- 可提现金额 -->
+  <view class="balance-info">
+    <text class="balance-label">可提现金额</text>
+    <text class="balance-value">¥{{formatMoney(availableBalance)}}</text>
+  </view>
+
+  <!-- 提现金额输入 -->
+  <view class="amount-card card">
+    <view class="amount-header">
+      <text class="amount-label">提现金额</text>
+      <text class="withdraw-all" bindtap="withdrawAll">全部提现</text>
+    </view>
+    <view class="amount-input-wrap">
+      <text class="amount-symbol">¥</text>
+      <input class="amount-input" 
+             type="digit" 
+             placeholder="请输入提现金额"
+             value="{{amount}}"
+             bindinput="onAmountInput" />
+    </view>
+    <view class="amount-tips">
+      <text>最低提现金额 ¥{{minAmount}}</text>
+    </view>
+  </view>
+
+  <!-- 提现方式 -->
+  <view class="channel-card card">
+    <view class="card-title">提现到</view>
+    <view class="channel-list">
+      <view class="channel-item {{channel === 'wechat' ? 'active' : ''}}" 
+            bindtap="switchChannel" data-channel="wechat">
+        <text class="channel-icon">💳</text>
+        <view class="channel-info">
+          <text class="channel-name">微信零钱</text>
+          <text class="channel-desc">即时到账</text>
+        </view>
+        <view class="channel-check" wx:if="{{channel === 'wechat'}}">✓</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 提现说明 -->
+  <view class="tips-card card">
+    <view class="card-title">提现说明</view>
+    <view class="tips-content">
+      <text>• 提现金额将在1-3个工作日内到账</text>
+      <text>• 单笔最低提现金额为{{minAmount}}元</text>
+      <text>• 单日最高提现金额为500元</text>
+      <text>• 如有疑问请联系客服</text>
+    </view>
+  </view>
+
+  <!-- 提交按钮 -->
+  <view class="submit-section">
+    <button class="btn btn-primary btn-block" 
+            bindtap="submitWithdraw"
+            loading="{{submitting}}"
+            disabled="{{submitting || !amount}}">
+      {{submitting ? '提交中...' : '确认提现'}}
+    </button>
+  </view>
+</view>
+
