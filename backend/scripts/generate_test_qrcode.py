@@ -33,7 +33,7 @@ def generate_qrcode_data(
     device_secret: str,
     weight_gram: int,
     unit_price_fen: int = 30,
-    expire_seconds: int = 600,
+    expire_seconds: int = 3600,
     sequence: int = 1
 ) -> str:
     """
@@ -100,7 +100,7 @@ def main():
         device_secret=device_secret,
         weight_gram=weight,
         unit_price_fen=30,  # 0.30元/kg
-        expire_seconds=600  # 10分钟
+        expire_seconds=3600  # 10分钟
     )
     
     print("\n" + "=" * 60)
