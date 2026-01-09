@@ -20,8 +20,18 @@ Page({
         // 计算环保数据
         const treesPlanted = (result.carbon_reduction / 20).toFixed(1);
         const waterSaved = Math.round(result.weight * 2500);
+        
+        // 预格式化显示数据
+        const displayResult = {
+          ...result,
+          amountDisplay: util.formatMoney(result.amount),
+          weightDisplay: result.weight ? Number(result.weight).toFixed(2) : '0.00',
+          carbonDisplay: result.carbon_reduction ? Number(result.carbon_reduction).toFixed(2) : '0.00',
+          walletBalanceDisplay: util.formatMoney(result.wallet_balance)
+        };
+        
         this.setData({ 
-          result,
+          result: displayResult,
           treesPlanted,
           waterSaved
         });

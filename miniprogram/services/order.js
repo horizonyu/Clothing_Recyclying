@@ -34,7 +34,8 @@ const claimOrder = (orderId) => {
 const getOrderList = (params = {}) => {
   const { page = 1, pageSize = 20, status } = params;
   const data = { page, page_size: pageSize };
-  if (status !== undefined) {
+  // 只有当 status 是有效数字时才添加到请求参数
+  if (status !== undefined && status !== null) {
     data.status = status;
   }
   return request.get('/order/list', data);

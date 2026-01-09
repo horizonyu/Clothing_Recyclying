@@ -1,0 +1,56 @@
+<!--pages/profile-edit/profile-edit.wxml-->
+<!--个人信息编辑页面-->
+
+<view class="container">
+  <!-- 头像编辑 -->
+  <view class="edit-section">
+    <view class="section-title">头像</view>
+    <view class="avatar-edit">
+      <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+        <image 
+          class="avatar-preview" 
+          src="{{avatarUrl || '/images/default-avatar.png'}}" 
+          mode="aspectFill"
+        ></image>
+        <view class="avatar-mask">
+          <text class="edit-icon">📷</text>
+        </view>
+      </button>
+      <text class="avatar-tip">点击更换头像</text>
+    </view>
+  </view>
+
+  <!-- 昵称编辑 -->
+  <view class="edit-section">
+    <view class="section-title">昵称</view>
+    <view class="input-wrap">
+      <input 
+        class="nickname-input"
+        type="nickname"
+        placeholder="请输入昵称"
+        value="{{nickname}}"
+        bindinput="onNicknameInput"
+        bindchange="onNicknameChange"
+        maxlength="20"
+      />
+      <text class="char-count">{{nickname.length}}/20</text>
+    </view>
+  </view>
+
+  <!-- 用户ID（只读） -->
+  <view class="edit-section" wx:if="{{userInfo.user_id}}">
+    <view class="section-title">用户ID</view>
+    <view class="readonly-field">
+      <text class="readonly-value">{{userInfo.user_id}}</text>
+      <text class="readonly-tip">（不可修改）</text>
+    </view>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="action-section">
+    <button class="save-btn" bindtap="saveProfile" loading="{{isSubmitting}}">
+      保存修改
+    </button>
+    <button class="cancel-btn" bindtap="cancel">取消</button>
+  </view>
+</view>

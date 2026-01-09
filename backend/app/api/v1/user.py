@@ -16,7 +16,8 @@ from app.schemas.common import ResponseModel
 from app.schemas.user import (
     WechatLoginRequest, 
     UserLoginResponse, 
-    UserProfileResponse
+    UserProfileResponse,
+    UpdateProfileRequest
 )
 from app.api.deps import get_current_user
 
@@ -130,4 +131,44 @@ async def get_profile(
         total_carbon=current_user.total_carbon,
         total_count=current_user.total_count
     ))
+
+
+@router.put("/profile", response_model=ResponseModel)
+async def update_profile(
+    request: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """更新用户信息"""
+    # 更新昵称
+    if request.nickname is not None:
+        # 验证昵称长度
+        if len(request.nickname) > 20:
+            raise HTTPException(status_code=400, detail="昵称不能超过20个字符")
+        if len(request.nickname.strip()) == 0:
+            raise HTTPException(status_code=400, detail="昵称不能为空")
+        current_user.nickname = request.nickname.strip()
+    
+    # 更新头像
+    if request.avatar_url is not None:
+        current_user.avatar_url = request.avatar_url
+    
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return ResponseModel(
+        message="更新成功",
+        data=UserProfileResponse(
+            user_id=current_user.user_id,
+            nickname=current_user.nickname,
+            avatar_url=current_user.avatar_url,
+            phone=current_user.phone,
+            is_verified=current_user.is_verified,
+            balance=current_user.balance,
+            points=current_user.points,
+            total_weight=current_user.total_weight,
+            total_carbon=current_user.total_carbon,
+            total_count=current_user.total_count
+        )
+    )
 

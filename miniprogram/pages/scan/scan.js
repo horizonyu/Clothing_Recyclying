@@ -70,9 +70,18 @@ Page({
           
           util.hideLoading();
           
+          // 格式化数据用于显示
+          const displayInfo = {
+            ...orderInfo,
+            weightDisplay: orderInfo.weight ? Number(orderInfo.weight).toFixed(2) : '0.00',
+            unitPriceDisplay: orderInfo.unit_price ? Number(orderInfo.unit_price).toFixed(2) : '0.00',
+            amountDisplay: orderInfo.amount ? Number(orderInfo.amount).toFixed(2) : '0.00',
+            carbonDisplay: orderInfo.carbon_reduction ? Number(orderInfo.carbon_reduction).toFixed(2) : '0.00'
+          };
+          
           // 保存订单信息，显示弹窗
           this.setData({
-            orderInfo,
+            orderInfo: displayInfo,
             showClaimModal: true
           });
           

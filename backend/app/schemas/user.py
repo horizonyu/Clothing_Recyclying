@@ -34,6 +34,12 @@ class UserProfileResponse(BaseModel):
     total_count: int = 0
 
 
+class UpdateProfileRequest(BaseModel):
+    """更新用户信息请求"""
+    nickname: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
 class WalletBalanceResponse(BaseModel):
     """钱包余额响应"""
     balance: float

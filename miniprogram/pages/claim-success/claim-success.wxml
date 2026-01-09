@@ -15,7 +15,7 @@
       <text class="amount-label">本次领取</text>
       <view class="amount-value">
         <text class="amount-symbol">¥</text>
-        <text class="amount-num">{{formatMoney(result.amount)}}</text>
+        <text class="amount-num">{{result.amountDisplay}}</text>
       </view>
     </view>
 
@@ -24,19 +24,19 @@
     <view class="info-grid">
       <view class="info-item">
         <text class="info-label">投递重量</text>
-        <text class="info-value">{{result.weight}} kg</text>
+        <text class="info-value">{{result.weightDisplay}} kg</text>
       </view>
       <view class="info-item">
         <text class="info-label">碳减排量</text>
-        <text class="info-value">{{result.carbon_reduction}} kg</text>
+        <text class="info-value">{{result.carbonDisplay}} kg</text>
       </view>
       <view class="info-item">
         <text class="info-label">获得积分</text>
-        <text class="info-value">+{{result.points_earned}}</text>
+        <text class="info-value">+{{result.points_earned || 0}}</text>
       </view>
       <view class="info-item">
         <text class="info-label">钱包余额</text>
-        <text class="info-value">¥{{formatMoney(result.wallet_balance)}}</text>
+        <text class="info-value">¥{{result.walletBalanceDisplay}}</text>
       </view>
     </view>
   </view>

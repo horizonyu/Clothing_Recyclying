@@ -93,6 +93,14 @@ Page({
     }
   },
 
+  // 跳转到编辑个人信息
+  goToEditProfile() {
+    if (!this.data.isLogin) {
+      return this.handleLogin();
+    }
+    wx.navigateTo({ url: '/pages/profile-edit/profile-edit' });
+  },
+
   // 跳转到钱包
   goToWallet() {
     if (!this.data.isLogin) {

@@ -28,8 +28,8 @@
       <!-- 订单头部 -->
       <view class="order-header">
         <text class="order-id">订单号: {{item.order_id}}</text>
-        <text class="order-status tag tag-{{getStatusInfo(item.status).type}}">
-          {{getStatusInfo(item.status).text}}
+        <text class="order-status tag tag-{{item.statusInfo.type}}">
+          {{item.statusInfo.text}}
         </text>
       </view>
       
@@ -37,23 +37,23 @@
       <view class="order-body">
         <view class="order-info">
           <text class="device-name">📍 {{item.device_name || '智能回收箱'}}</text>
-          <text class="order-time">{{formatDate(item.created_at)}}</text>
+          <text class="order-time">{{item.dateDisplay}}</text>
         </view>
         <view class="order-detail">
           <view class="detail-item">
             <text class="detail-label">重量</text>
-            <text class="detail-value">{{item.weight}} kg</text>
+            <text class="detail-value">{{item.weightDisplay}} kg</text>
           </view>
           <view class="detail-item">
             <text class="detail-label">金额</text>
-            <text class="detail-value amount">¥{{formatMoney(item.amount)}}</text>
+            <text class="detail-value amount">¥{{item.amountDisplay}}</text>
           </view>
         </view>
       </view>
       
       <!-- 订单底部 -->
       <view class="order-footer">
-        <text class="carbon-text">🌱 减碳 {{item.carbon_reduction}} kg</text>
+        <text class="carbon-text">🌱 减碳 {{item.carbonDisplay}} kg</text>
         <text class="arrow">></text>
       </view>
     </view>

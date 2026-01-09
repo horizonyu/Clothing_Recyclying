@@ -46,6 +46,18 @@ Page({
     }
   },
 
+  // 格式化订单数据用于显示
+  formatOrdersForDisplay(orders) {
+    return orders.map(item => ({
+      ...item,
+      amountDisplay: util.formatMoney(item.amount),
+      weightDisplay: item.weight ? Number(item.weight).toFixed(2) : '0.00',
+      carbonDisplay: item.carbon_reduction ? Number(item.carbon_reduction).toFixed(2) : '0.00',
+      dateDisplay: util.formatDate(item.created_at, 'YYYY-MM-DD HH:mm'),
+      statusInfo: util.getOrderStatusInfo(item.status)
+    }));
+  },
+
   // 加载订单列表
   async loadOrders() {
     if (!app.globalData.isLogin) {
@@ -66,8 +78,10 @@ Page({
         status: this.data.currentStatus
       });
 
+      const formattedOrders = this.formatOrdersForDisplay(result.items || []);
+
       this.setData({
-        orders: result.items || [],
+        orders: formattedOrders,
         page: 1,
         hasMore: (result.items || []).length >= this.data.pageSize,
         loading: false
@@ -89,8 +103,10 @@ Page({
         status: this.data.currentStatus
       });
 
+      const formattedOrders = this.formatOrdersForDisplay(result.items || []);
+
       this.setData({
-        orders: result.items || [],
+        orders: formattedOrders,
         hasMore: (result.items || []).length >= this.data.pageSize,
         refreshing: false
       });
@@ -115,7 +131,7 @@ Page({
         status: this.data.currentStatus
       });
 
-      const newOrders = result.items || [];
+      const newOrders = this.formatOrdersForDisplay(result.items || []);
       this.setData({
         orders: [...this.data.orders, ...newOrders],
         page: nextPage,

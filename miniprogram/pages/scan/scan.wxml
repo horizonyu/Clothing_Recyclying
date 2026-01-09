@@ -73,15 +73,15 @@
       <view class="info-list">
         <view class="info-item">
           <text class="info-label">投递重量</text>
-          <text class="info-value">{{formatWeight(orderInfo.weight)}} kg</text>
+          <text class="info-value">{{orderInfo.weightDisplay}} kg</text>
         </view>
         <view class="info-item">
           <text class="info-label">回收单价</text>
-          <text class="info-value">¥{{formatMoney(orderInfo.unit_price)}}/kg</text>
+          <text class="info-value">¥{{orderInfo.unitPriceDisplay}}/kg</text>
         </view>
         <view class="info-item highlight">
           <text class="info-label">可领金额</text>
-          <text class="info-value amount">¥{{formatMoney(orderInfo.amount)}}</text>
+          <text class="info-value amount">¥{{orderInfo.amountDisplay}}</text>
         </view>
       </view>
       
@@ -90,11 +90,11 @@
         <view class="eco-title">🌱 您的环保贡献</view>
         <view class="eco-grid">
           <view class="eco-item">
-            <text class="eco-value">{{formatCarbon(orderInfo.carbon_reduction)}}</text>
+            <text class="eco-value">{{orderInfo.carbonDisplay}}</text>
             <text class="eco-label">碳减排(kg CO₂)</text>
           </view>
           <view class="eco-item">
-            <text class="eco-value">{{orderInfo.points}}</text>
+            <text class="eco-value">{{orderInfo.points || 0}}</text>
             <text class="eco-label">获得积分</text>
           </view>
         </view>

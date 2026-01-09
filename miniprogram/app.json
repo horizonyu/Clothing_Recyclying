@@ -8,6 +8,7 @@
     "pages/wallet/wallet",
     "pages/withdraw/withdraw",
     "pages/profile/profile",
+    "pages/profile-edit/profile-edit",
     "pages/nearby/nearby"
   ],
   "window": {
