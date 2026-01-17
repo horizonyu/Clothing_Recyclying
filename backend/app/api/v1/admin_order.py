@@ -1,9 +1,10 @@
 """
 管理后台 - 订单管理API
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from loguru import logger
 from app.db.database import get_db
 from app.models.order import DeliveryOrder
 from app.models.admin import Admin
@@ -23,7 +24,8 @@ async def get_order_list(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """获取订单列表"""
-    query = select(DeliveryOrder)
+    try:
+        query = select(DeliveryOrder)
     
     # 筛选条件
     conditions = []
@@ -58,10 +60,13 @@ async def get_order_list(
             "created_at": order.created_at.isoformat() if order.created_at else None
         })
     
-    return ResponseModel(data=PaginatedResponse(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
-        pages=(total + page_size - 1) // page_size
-    ))
+        return ResponseModel(data=PaginatedResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            pages=(total + page_size - 1) // page_size if total > 0 else 0
+        ))
+    except Exception as e:
+        logger.error(f"获取订单列表失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取订单列表失败: {str(e)}")

@@ -4,6 +4,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from loguru import logger
 from app.db.database import get_db
 from app.models.device import Device
 from app.models.admin import Admin
@@ -23,7 +24,8 @@ async def get_device_list(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """获取设备列表"""
-    query = select(Device)
+    try:
+        query = select(Device)
     
     # 筛选条件
     conditions = []
@@ -58,10 +60,13 @@ async def get_device_list(
             "total_weight": 0.0  # TODO: 统计重量
         })
     
-    return ResponseModel(data=PaginatedResponse(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
-        pages=(total + page_size - 1) // page_size
-    ))
+        return ResponseModel(data=PaginatedResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            pages=(total + page_size - 1) // page_size if total > 0 else 0
+        ))
+    except Exception as e:
+        logger.error(f"获取设备列表失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取设备列表失败: {str(e)}")

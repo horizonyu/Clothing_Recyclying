@@ -4,6 +4,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from loguru import logger
 from app.db.database import get_db
 from app.models.user import User
 from app.models.admin import Admin
@@ -23,7 +24,8 @@ async def get_user_list(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """获取用户列表"""
-    query = select(User)
+    try:
+        query = select(User)
     
     # 筛选条件
     conditions = []
@@ -59,13 +61,16 @@ async def get_user_list(
             "status": user.status
         })
     
-    return ResponseModel(data=PaginatedResponse(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
-        pages=(total + page_size - 1) // page_size
-    ))
+        return ResponseModel(data=PaginatedResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            pages=(total + page_size - 1) // page_size if total > 0 else 0
+        ))
+    except Exception as e:
+        logger.error(f"获取用户列表失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取用户列表失败: {str(e)}")
 
 
 @router.put("/user/{user_id}/status", response_model=ResponseModel)
@@ -76,13 +81,19 @@ async def update_user_status(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """更新用户状态"""
-    result = await db.execute(select(User).where(User.user_id == user_id))
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
-    
-    user.status = status
-    await db.commit()
-    
-    return ResponseModel(message="更新成功")
+    try:
+        result = await db.execute(select(User).where(User.user_id == user_id))
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        user.status = status
+        await db.commit()
+        
+        return ResponseModel(message="更新成功")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新用户状态失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"更新用户状态失败: {str(e)}")
