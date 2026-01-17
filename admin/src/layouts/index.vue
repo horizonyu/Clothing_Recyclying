@@ -3,7 +3,7 @@
     <!-- 侧边栏 -->
     <el-aside :width="isCollapse ? '64px' : '200px'" class="sidebar-container">
       <div class="logo">
-        <img v-if="!isCollapse" src="/logo.png" alt="Logo" />
+        <span v-if="!isCollapse" class="logo-icon">♻️</span>
         <span v-if="!isCollapse">回收箱管理</span>
       </div>
       <el-menu
@@ -142,9 +142,8 @@ const handleCommand = async (command) => {
     font-weight: bold;
     padding: 0 20px;
 
-    img {
-      width: 32px;
-      height: 32px;
+    .logo-icon {
+      font-size: 24px;
       margin-right: 10px;
     }
   }
