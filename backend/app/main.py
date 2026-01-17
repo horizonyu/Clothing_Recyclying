@@ -1,8 +1,10 @@
 """
 智能旧衣回收箱 - 后端服务入口
 """
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from app.config import settings
@@ -43,6 +45,12 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(api_router, prefix="/api/v1")
+
+# 静态文件服务（用于头像等上传文件）
+static_dir = "static"
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 @app.get("/")

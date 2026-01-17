@@ -54,7 +54,7 @@
       <!-- 订单底部 -->
       <view class="order-footer">
         <text class="carbon-text">🌱 减碳 {{item.carbonDisplay}} kg</text>
-        <text class="arrow">></text>
+        <image class="arrow" src="/images/info.svg" mode="aspectFit"></image>
       </view>
     </view>
   </view>

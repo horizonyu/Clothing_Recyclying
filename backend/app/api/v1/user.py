@@ -1,13 +1,15 @@
 """
 用户API
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, timedelta
 from jose import jwt
 import httpx
 import uuid
+import os
+import aiofiles
 
 from app.db.database import get_db
 from app.config import settings
@@ -22,6 +24,9 @@ from app.schemas.user import (
 from app.api.deps import get_current_user
 
 router = APIRouter()
+
+# 头像上传目录
+AVATAR_UPLOAD_DIR = "static/avatars"
 
 
 def generate_user_id() -> str:
@@ -170,5 +175,48 @@ async def update_profile(
             total_carbon=current_user.total_carbon,
             total_count=current_user.total_count
         )
+    )
+
+
+@router.post("/avatar/upload", response_model=ResponseModel)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """上传头像"""
+    # 验证文件类型
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="只支持 JPG、PNG、GIF、WEBP 格式的图片")
+    
+    # 验证文件大小（最大 2MB）
+    content = await file.read()
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="图片大小不能超过 2MB")
+    
+    # 生成文件名
+    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    filename = f"{current_user.user_id}_{int(datetime.now().timestamp())}.{ext}"
+    
+    # 确保目录存在
+    os.makedirs(AVATAR_UPLOAD_DIR, exist_ok=True)
+    
+    # 保存文件
+    file_path = os.path.join(AVATAR_UPLOAD_DIR, filename)
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(content)
+    
+    # 生成访问 URL
+    avatar_url = f"/static/avatars/{filename}"
+    
+    # 更新用户头像
+    current_user.avatar_url = avatar_url
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return ResponseModel(
+        message="上传成功",
+        data={"avatar_url": avatar_url}
     )
 

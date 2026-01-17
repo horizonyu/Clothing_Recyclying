@@ -58,20 +58,22 @@
 }
 
 .amount-symbol {
-  font-size: 48rpx;
+  font-size: 40rpx;
   color: var(--text-primary);
-  margin-right: 16rpx;
+  margin-right: 12rpx;
+  flex-shrink: 0;
 }
 
 .amount-input {
   flex: 1;
-  font-size: 60rpx;
+  font-size: 48rpx;
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
 }
 
 .amount-input::placeholder {
-  font-size: 36rpx;
+  font-size: 28rpx;
   font-weight: normal;
   color: var(--text-placeholder);
 }

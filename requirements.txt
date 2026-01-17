@@ -23,6 +23,7 @@ cryptography==41.0.7
 
 # 支付与第三方
 wechatpy==1.8.18
+wechatpayv3==1.2.0
 alipay-sdk-python==3.6.885
 
 # AI/机器学习 (衣物识别)
@@ -37,6 +38,7 @@ kombu==5.3.4
 
 # 工具库
 httpx==0.26.0
+requests==2.31.0
 python-dateutil==2.8.2
 loguru==0.7.2
 pyyaml==6.0.1

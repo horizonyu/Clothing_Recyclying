@@ -14,13 +14,16 @@ Page({
     // 钱包信息
     wallet: {
       balance: 0,
+      balanceDisplay: '0.00',
       points: 0
     },
     
     // 统计信息
     stats: {
       totalWeight: 0,
+      totalWeightDisplay: '0.00',
       totalCarbon: 0,
+      totalCarbonDisplay: '0.00',
       totalCount: 0
     }
   },
@@ -55,14 +58,21 @@ Page({
         userService.getUserProfile()
       ]);
 
+      const balance = walletRes.balance || 0;
+      const totalWeight = profileRes.total_weight || 0;
+      const totalCarbon = profileRes.total_carbon || 0;
+
       this.setData({
         wallet: {
-          balance: walletRes.balance || 0,
+          balance: balance,
+          balanceDisplay: Number(balance).toFixed(2),
           points: walletRes.points || 0
         },
         stats: {
-          totalWeight: profileRes.total_weight || 0,
-          totalCarbon: profileRes.total_carbon || 0,
+          totalWeight: totalWeight,
+          totalWeightDisplay: Number(totalWeight).toFixed(1),
+          totalCarbon: totalCarbon,
+          totalCarbonDisplay: Number(totalCarbon).toFixed(1),
           totalCount: profileRes.total_count || 0
         },
         userInfo: {
@@ -151,16 +161,11 @@ Page({
       this.setData({
         isLogin: false,
         userInfo: null,
-        wallet: { balance: 0, points: 0 },
-        stats: { totalWeight: 0, totalCarbon: 0, totalCount: 0 }
+        wallet: { balance: 0, balanceDisplay: '0.00', points: 0 },
+        stats: { totalWeight: 0, totalWeightDisplay: '0.00', totalCarbon: 0, totalCarbonDisplay: '0.00', totalCount: 0 }
       });
       util.showSuccess('已退出登录');
     }
-  },
-
-  // 格式化金额
-  formatMoney(amount) {
-    return util.formatMoney(amount);
   }
 });
 

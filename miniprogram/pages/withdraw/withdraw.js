@@ -9,6 +9,7 @@ Page({
   data: {
     // 可提现余额
     availableBalance: 0,
+    availableBalanceDisplay: '0.00',
     
     // 提现金额
     amount: '',
@@ -31,8 +32,10 @@ Page({
   async loadBalance() {
     try {
       const result = await userService.getWalletBalance();
+      const balance = result.available_balance || result.balance || 0;
       this.setData({
-        availableBalance: result.available_balance || result.balance || 0
+        availableBalance: balance,
+        availableBalanceDisplay: Number(balance).toFixed(2)
       });
     } catch (e) {
       console.error('加载余额失败:', e);
@@ -104,10 +107,12 @@ Page({
       util.hideLoading();
       
       wx.showModal({
-        title: '提交成功',
-        content: '提现申请已提交，预计1-3个工作日到账',
+        title: '提现成功',
+        content: '提现申请已提交，资金将即时到账，请查看微信零钱',
         showCancel: false,
         success: () => {
+          // 刷新钱包余额
+          this.loadBalance();
           wx.navigateBack();
         }
       });
@@ -116,11 +121,6 @@ Page({
       util.showError(e.message || '提现失败');
       this.setData({ submitting: false });
     }
-  },
-
-  // 格式化金额
-  formatMoney(amount) {
-    return util.formatMoney(amount);
   }
 });
 

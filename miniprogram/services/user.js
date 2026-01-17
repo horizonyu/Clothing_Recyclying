@@ -32,6 +32,42 @@ const updateProfile = (data) => {
 };
 
 /**
+ * 上传头像
+ * @param {string} filePath 本地文件路径
+ * @returns {Promise<object>} 返回上传后的头像URL
+ */
+const uploadAvatar = (filePath) => {
+  const config = require('../config/index');
+  const app = getApp();
+  
+  return new Promise((resolve, reject) => {
+    wx.uploadFile({
+      url: config.API_BASE_URL + '/user/avatar/upload',
+      filePath: filePath,
+      name: 'file',
+      header: {
+        'Authorization': `Bearer ${app.globalData.token}`
+      },
+      success: (res) => {
+        try {
+          const data = JSON.parse(res.data);
+          if (data.code === 0 || data.code === 200) {
+            resolve(data.data);
+          } else {
+            reject(new Error(data.message || '上传失败'));
+          }
+        } catch (e) {
+          reject(new Error('解析响应失败'));
+        }
+      },
+      fail: (err) => {
+        reject(new Error(err.errMsg || '上传失败'));
+      }
+    });
+  });
+};
+
+/**
  * 绑定手机号
  * @param {string} encryptedData 加密数据
  * @param {string} iv 初始向量
@@ -104,6 +140,7 @@ module.exports = {
   loginByWechat,
   getUserProfile,
   updateProfile,
+  uploadAvatar,
   bindPhone,
   verifyIdentity,
   getWalletBalance,

@@ -9,7 +9,6 @@ Page({
   data: {
     userInfo: null,
     nickname: '',
-    avatarUrl: '',
     isSubmitting: false
   },
 
@@ -23,27 +22,9 @@ Page({
     if (userInfo) {
       this.setData({
         userInfo: userInfo,
-        nickname: userInfo.nickname || '',
-        avatarUrl: userInfo.avatar_url || ''
+        nickname: userInfo.nickname || ''
       });
     }
-  },
-
-  // 选择头像（微信头像选择）
-  onChooseAvatar(e) {
-    const { avatarUrl } = e.detail;
-    console.log('选择的头像:', avatarUrl);
-    
-    // 微信返回的是临时文件路径，实际项目中需要上传到服务器
-    // 这里暂时直接使用临时路径
-    this.setData({
-      avatarUrl: avatarUrl
-    });
-    
-    wx.showToast({
-      title: '头像已选择',
-      icon: 'success'
-    });
   },
 
   // 昵称输入
@@ -64,7 +45,7 @@ Page({
 
   // 保存修改
   async saveProfile() {
-    const { nickname, avatarUrl, userInfo, isSubmitting } = this.data;
+    const { nickname, userInfo, isSubmitting } = this.data;
     
     if (isSubmitting) return;
     
@@ -80,12 +61,12 @@ Page({
       return;
     }
     
-    // 检查是否有修改
+    // 检查昵称是否有修改
     const hasNicknameChanged = trimmedNickname !== (userInfo.nickname || '');
-    const hasAvatarChanged = avatarUrl !== (userInfo.avatar_url || '');
     
-    if (!hasNicknameChanged && !hasAvatarChanged) {
-      util.showToast('没有修改');
+    if (!hasNicknameChanged) {
+      // 昵称没变，直接返回
+      wx.navigateBack();
       return;
     }
     
@@ -94,25 +75,17 @@ Page({
     try {
       util.showLoading('保存中...');
       
-      // 构建更新数据
-      const updateData = {};
-      if (hasNicknameChanged) {
-        updateData.nickname = trimmedNickname;
-      }
-      if (hasAvatarChanged) {
-        updateData.avatar_url = avatarUrl;
-      }
-      
-      // 调用更新接口
-      const result = await userService.updateProfile(updateData);
+      // 只更新昵称
+      const result = await userService.updateProfile({
+        nickname: trimmedNickname
+      });
       
       util.hideLoading();
       
       // 更新全局数据
       app.globalData.userInfo = {
         ...app.globalData.userInfo,
-        nickname: result.nickname,
-        avatar_url: result.avatar_url
+        nickname: result.nickname
       };
       
       // 更新本地存储

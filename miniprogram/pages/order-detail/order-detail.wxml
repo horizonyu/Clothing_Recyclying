@@ -78,7 +78,7 @@
       <text class="track-icon">📦</text>
       <text class="track-text">查看衣物去向</text>
     </view>
-    <text class="track-arrow">></text>
+    <image class="track-arrow" src="/images/info.svg" mode="aspectFit"></image>
   </view>
 </view>
 

@@ -5,7 +5,7 @@
   <!-- 可提现金额 -->
   <view class="balance-info">
     <text class="balance-label">可提现金额</text>
-    <text class="balance-value">¥{{formatMoney(availableBalance)}}</text>
+    <text class="balance-value">¥{{availableBalanceDisplay}}</text>
   </view>
 
   <!-- 提现金额输入 -->
@@ -21,9 +21,6 @@
              placeholder="请输入提现金额"
              value="{{amount}}"
              bindinput="onAmountInput" />
-    </view>
-    <view class="amount-tips">
-      <text>最低提现金额 ¥{{minAmount}}</text>
     </view>
   </view>
 
@@ -47,7 +44,7 @@
   <view class="tips-card card">
     <view class="card-title">提现说明</view>
     <view class="tips-content">
-      <text>• 提现金额将在1-3个工作日内到账</text>
+      <text>• 提现金额将即时到账，请查看微信零钱</text>
       <text>• 单笔最低提现金额为{{minAmount}}元</text>
       <text>• 单日最高提现金额为500元</text>
       <text>• 如有疑问请联系客服</text>

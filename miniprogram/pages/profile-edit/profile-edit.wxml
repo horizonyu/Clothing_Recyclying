@@ -2,21 +2,15 @@
 <!--个人信息编辑页面-->
 
 <view class="container">
-  <!-- 头像编辑 -->
+  <!-- 头像显示（只读） -->
   <view class="edit-section">
     <view class="section-title">头像</view>
     <view class="avatar-edit">
-      <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
-        <image 
-          class="avatar-preview" 
-          src="{{avatarUrl || '/images/default-avatar.png'}}" 
-          mode="aspectFill"
-        ></image>
-        <view class="avatar-mask">
-          <text class="edit-icon">📷</text>
-        </view>
-      </button>
-      <text class="avatar-tip">点击更换头像</text>
+      <image 
+        class="avatar-preview" 
+        src="/images/user_2.png" 
+        mode="aspectFill"
+      ></image>
     </view>
   </view>
 

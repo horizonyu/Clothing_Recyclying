@@ -135,8 +135,8 @@
 }
 
 .arrow {
-  font-size: 28rpx;
-  color: var(--text-placeholder);
+  width: 28rpx;
+  height: 28rpx;
 }
 
 /* ===== 空状态 ===== */

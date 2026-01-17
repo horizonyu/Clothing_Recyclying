@@ -6,7 +6,7 @@ import uuid
 from sqlalchemy import text
 
 from app.db.database import engine, Base, AsyncSessionLocal
-from app.models import User, Device, DeliveryOrder, WalletRecord
+from app.models import User, Device, DeliveryOrder, WalletRecord, WithdrawRecord
 
 
 async def create_tables():

@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     WECHAT_APPID: str = ""
     WECHAT_SECRET: str = ""
     
+    # 微信支付配置
+    WECHAT_MCH_ID: Optional[str] = ""  # 商户号
+    WECHAT_MCH_SERIAL_NO: Optional[str] = ""  # 商户证书序列号
+    WECHAT_MCH_PRIVATE_KEY_PATH: Optional[str] = ""  # 商户私钥文件路径
+    WECHAT_MCH_CERT_PATH: Optional[str] = ""  # 商户证书文件路径
+    WECHAT_APIV3_KEY: Optional[str] = ""  # APIv3密钥
+    
     # JWT配置
     JWT_SECRET_KEY: str = "your-jwt-secret"
     JWT_ALGORITHM: str = "HS256"

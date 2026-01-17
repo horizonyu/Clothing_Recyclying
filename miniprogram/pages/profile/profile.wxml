@@ -5,24 +5,24 @@
   <!-- 用户信息卡片 -->
   <view class="user-card">
     <view class="user-info" wx:if="{{isLogin}}" bindtap="goToEditProfile">
-      <image class="avatar" src="{{userInfo.avatar_url || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+      <image class="avatar" src="/images/user_2.png" mode="aspectFill"></image>
       <view class="user-detail">
         <text class="nickname">{{userInfo.nickname || '回收达人'}}</text>
         <text class="user-id">ID: {{userInfo.user_id}}</text>
       </view>
       <view class="edit-hint">
         <text class="edit-text">编辑</text>
-        <text class="arrow">></text>
+        <image class="arrow" src="/images/info.svg" mode="aspectFit"></image>
       </view>
     </view>
     
     <view class="user-info login-prompt" wx:else bindtap="handleLogin">
-      <image class="avatar" src="/images/default-avatar.png" mode="aspectFill"></image>
+      <image class="avatar" src="/images/user_2.png" mode="aspectFill"></image>
       <view class="user-detail">
         <text class="nickname">点击登录</text>
         <text class="login-tip">登录后查看更多信息</text>
       </view>
-      <text class="arrow">></text>
+      <image class="arrow" src="/images/info.svg" mode="aspectFit"></image>
     </view>
   </view>
 
@@ -30,7 +30,7 @@
   <view class="asset-card card" wx:if="{{isLogin}}">
     <view class="asset-grid">
       <view class="asset-item" bindtap="goToWallet">
-        <text class="asset-value">¥{{formatMoney(wallet.balance)}}</text>
+        <text class="asset-value">¥{{wallet.balanceDisplay}}</text>
         <text class="asset-label">钱包余额</text>
       </view>
       <view class="asset-divider"></view>
@@ -54,11 +54,11 @@
         <text class="eco-label">投递次数</text>
       </view>
       <view class="eco-item">
-        <text class="eco-value">{{stats.totalWeight}}</text>
+        <text class="eco-value">{{stats.totalWeightDisplay}}</text>
         <text class="eco-label">回收重量(kg)</text>
       </view>
       <view class="eco-item">
-        <text class="eco-value">{{stats.totalCarbon}}</text>
+        <text class="eco-value">{{stats.totalCarbonDisplay}}</text>
         <text class="eco-label">减碳量(kg)</text>
       </view>
     </view>
@@ -69,18 +69,18 @@
     <view class="menu-item" bindtap="goToOrders">
       <text class="menu-icon">📋</text>
       <text class="menu-text">投递记录</text>
-      <text class="menu-arrow">></text>
+      <image class="menu-arrow" src="/images/info.svg" mode="aspectFit"></image>
     </view>
     <view class="menu-item" bindtap="goToWallet">
       <text class="menu-icon">💰</text>
       <text class="menu-text">我的钱包</text>
-      <text class="menu-arrow">></text>
+      <image class="menu-arrow" src="/images/info.svg" mode="aspectFit"></image>
     </view>
     <view class="menu-item">
       <text class="menu-icon">🎁</text>
       <text class="menu-text">积分商城</text>
       <text class="menu-tag">敬请期待</text>
-      <text class="menu-arrow">></text>
+      <image class="menu-arrow" src="/images/info.svg" mode="aspectFit"></image>
     </view>
   </view>
 
@@ -88,17 +88,17 @@
     <view class="menu-item" bindtap="contactService">
       <text class="menu-icon">📞</text>
       <text class="menu-text">联系客服</text>
-      <text class="menu-arrow">></text>
+      <image class="menu-arrow" src="/images/info.svg" mode="aspectFit"></image>
     </view>
     <view class="menu-item" bindtap="showAbout">
       <text class="menu-icon">ℹ️</text>
       <text class="menu-text">关于我们</text>
-      <text class="menu-arrow">></text>
+      <image class="menu-arrow" src="/images/info.svg" mode="aspectFit"></image>
     </view>
     <button class="menu-item feedback-btn" open-type="feedback">
       <text class="menu-icon">💬</text>
       <text class="menu-text">意见反馈</text>
-      <text class="menu-arrow">></text>
+      <image class="menu-arrow" src="/images/info.svg" mode="aspectFit"></image>
     </button>
   </view>
 
