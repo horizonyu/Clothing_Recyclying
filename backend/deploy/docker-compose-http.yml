@@ -1,0 +1,87 @@
+# 智能旧衣回收箱 - Docker Compose 配置（HTTP 版本，无需 SSL）
+# 适用于开发/测试环境或通过 IP 地址访问
+# 使用方法: docker-compose -f docker-compose-http.yml up -d
+
+version: '3.8'
+
+services:
+  # API 服务
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: clothing-recycle-api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Shanghai
+    env_file:
+      - ../.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - clothing-network
+
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: clothing-recycle-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+      MYSQL_DATABASE: clothing_recycle
+      MYSQL_USER: recycle
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-recycle123456}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - clothing-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: clothing-recycle-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - clothing-network
+
+  # Nginx 反向代理（HTTP 版本，无需 SSL 证书）
+  nginx:
+    image: nginx:alpine
+    container_name: clothing-recycle-nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf.http-only:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    networks:
+      - clothing-network
+
+networks:
+  clothing-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
