@@ -26,41 +26,41 @@ async def get_user_list(
     """获取用户列表"""
     try:
         query = select(User)
-    
-    # 筛选条件
-    conditions = []
-    if user_id:
-        conditions.append(User.user_id.like(f"%{user_id}%"))
-    if phone:
-        conditions.append(User.phone.like(f"%{phone}%"))
-    
-    if conditions:
-        query = query.where(and_(*conditions))
-    
-    # 查询总数
-    count_query = select(func.count()).select_from(query.subquery())
-    total = (await db.execute(count_query)).scalar()
-    
-    # 分页查询
-    query = query.order_by(User.created_at.desc())
-    query = query.offset((page - 1) * page_size).limit(page_size)
-    result = await db.execute(query)
-    users = result.scalars().all()
-    
-    # 转换为字典
-    items = []
-    for user in users:
-        items.append({
-            "user_id": user.user_id,
-            "nickname": user.nickname,
-            "phone": user.phone,
-            "balance": user.balance,
-            "total_weight": user.total_weight,
-            "total_count": user.total_count,
-            "is_verified": user.is_verified,
-            "status": user.status
-        })
-    
+        
+        # 筛选条件
+        conditions = []
+        if user_id:
+            conditions.append(User.user_id.like(f"%{user_id}%"))
+        if phone:
+            conditions.append(User.phone.like(f"%{phone}%"))
+        
+        if conditions:
+            query = query.where(and_(*conditions))
+        
+        # 查询总数
+        count_query = select(func.count()).select_from(query.subquery())
+        total = (await db.execute(count_query)).scalar()
+        
+        # 分页查询
+        query = query.order_by(User.created_at.desc())
+        query = query.offset((page - 1) * page_size).limit(page_size)
+        result = await db.execute(query)
+        users = result.scalars().all()
+        
+        # 转换为字典
+        items = []
+        for user in users:
+            items.append({
+                "user_id": user.user_id,
+                "nickname": user.nickname,
+                "phone": user.phone,
+                "balance": user.balance,
+                "total_weight": user.total_weight,
+                "total_count": user.total_count,
+                "is_verified": user.is_verified,
+                "status": user.status
+            })
+        
         return ResponseModel(data=PaginatedResponse(
             items=items,
             total=total,

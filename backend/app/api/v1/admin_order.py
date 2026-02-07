@@ -26,40 +26,40 @@ async def get_order_list(
     """获取订单列表"""
     try:
         query = select(DeliveryOrder)
-    
-    # 筛选条件
-    conditions = []
-    if order_id:
-        conditions.append(DeliveryOrder.order_id.like(f"%{order_id}%"))
-    if status:
-        conditions.append(DeliveryOrder.status == status)
-    
-    if conditions:
-        query = query.where(and_(*conditions))
-    
-    # 查询总数
-    count_query = select(func.count()).select_from(query.subquery())
-    total = (await db.execute(count_query)).scalar()
-    
-    # 分页查询
-    query = query.order_by(DeliveryOrder.created_at.desc())
-    query = query.offset((page - 1) * page_size).limit(page_size)
-    result = await db.execute(query)
-    orders = result.scalars().all()
-    
-    # 转换为字典
-    items = []
-    for order in orders:
-        items.append({
-            "order_id": order.order_id,
-            "user_id": order.user_id,
-            "device_id": order.device_id,
-            "weight": order.weight,
-            "amount": order.amount,
-            "status": order.status,
-            "created_at": order.created_at.isoformat() if order.created_at else None
-        })
-    
+        
+        # 筛选条件
+        conditions = []
+        if order_id:
+            conditions.append(DeliveryOrder.order_id.like(f"%{order_id}%"))
+        if status:
+            conditions.append(DeliveryOrder.status == status)
+        
+        if conditions:
+            query = query.where(and_(*conditions))
+        
+        # 查询总数
+        count_query = select(func.count()).select_from(query.subquery())
+        total = (await db.execute(count_query)).scalar()
+        
+        # 分页查询
+        query = query.order_by(DeliveryOrder.created_at.desc())
+        query = query.offset((page - 1) * page_size).limit(page_size)
+        result = await db.execute(query)
+        orders = result.scalars().all()
+        
+        # 转换为字典
+        items = []
+        for order in orders:
+            items.append({
+                "order_id": order.order_id,
+                "user_id": order.user_id,
+                "device_id": order.device_id,
+                "weight": order.weight,
+                "amount": order.amount,
+                "status": order.status,
+                "created_at": order.created_at.isoformat() if order.created_at else None
+            })
+        
         return ResponseModel(data=PaginatedResponse(
             items=items,
             total=total,
