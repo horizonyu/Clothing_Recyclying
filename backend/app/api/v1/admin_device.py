@@ -4,11 +4,12 @@
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, desc
 from loguru import logger
 from app.db.database import get_db
 from app.models.device import Device
 from app.models.order import DeliveryOrder
+from app.models.device_camera import DeviceCameraImage
 from app.models.admin import Admin
 from app.schemas.common import ResponseModel, PaginatedResponse
 from app.api.v1.admin import get_current_admin
@@ -162,6 +163,49 @@ async def get_device_detail(
                 "count": day_result.scalar() or 0
             })
         
+        # 最新一次摄像头图片（按batch_id分组，取最新）
+        latest_camera_images = {"camera_1": [], "camera_2": []}
+        try:
+            # 取最新的一个batch_id
+            latest_batch_result = await db.execute(
+                select(DeviceCameraImage.batch_id)
+                .where(DeviceCameraImage.device_id == device.device_id)
+                .order_by(desc(DeviceCameraImage.created_at))
+                .limit(1)
+            )
+            latest_batch_id = latest_batch_result.scalar()
+            
+            if latest_batch_id:
+                # 获取该batch的所有图片
+                batch_images_result = await db.execute(
+                    select(DeviceCameraImage)
+                    .where(and_(
+                        DeviceCameraImage.device_id == device.device_id,
+                        DeviceCameraImage.batch_id == latest_batch_id
+                    ))
+                    .order_by(DeviceCameraImage.camera_type, DeviceCameraImage.image_index)
+                )
+                batch_images = batch_images_result.scalars().all()
+                
+                for img in batch_images:
+                    camera_key = f"camera_{img.camera_type}"
+                    if camera_key in latest_camera_images:
+                        latest_camera_images[camera_key].append({
+                            "id": img.id,
+                            "image_data": img.image_data,
+                            "image_index": img.image_index,
+                            "captured_at": img.captured_at.strftime("%Y-%m-%d %H:%M:%S") if img.captured_at else None,
+                        })
+        except Exception as cam_err:
+            logger.warning(f"获取摄像头图片失败: {cam_err}")
+        
+        # 摄像头图片总数
+        camera_count_result = await db.execute(
+            select(func.count(DeviceCameraImage.id))
+            .where(DeviceCameraImage.device_id == device.device_id)
+        )
+        camera_total_count = camera_count_result.scalar() or 0
+        
         data = {
             # 基本信息
             "device_id": device.device_id,
@@ -187,6 +231,10 @@ async def get_device_detail(
             "temperature": device.temperature,
             "humidity": device.humidity,
             "smoke_level": device.smoke_level,
+            
+            # 摄像头图片
+            "camera_images": latest_camera_images,
+            "camera_total_count": camera_total_count,
             
             # 统计数据
             "total_orders": stats_row[0] or 0,
@@ -279,3 +327,83 @@ async def get_device_stats(
     except Exception as e:
         logger.error(f"获取设备统计失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"获取设备统计失败: {str(e)}")
+
+
+@router.get("/device/{device_id}/camera-images", response_model=ResponseModel)
+async def get_device_camera_images(
+    device_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    camera_type: int = Query(None, description="摄像头类型: 1-内部, 2-用户"),
+    db: AsyncSession = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    获取设备摄像头图片历史记录
+    
+    按上报批次分组返回，每个批次包含所有摄像头的图片。
+    """
+    try:
+        # 查询不重复的batch_id（按时间倒序）
+        batch_query = (
+            select(DeviceCameraImage.batch_id)
+            .where(DeviceCameraImage.device_id == device_id)
+            .group_by(DeviceCameraImage.batch_id)
+            .order_by(desc(func.max(DeviceCameraImage.created_at)))
+        )
+        
+        # 总批次数
+        count_subquery = batch_query.subquery()
+        total_result = await db.execute(select(func.count()).select_from(count_subquery))
+        total = total_result.scalar() or 0
+        
+        # 分页获取batch_id列表
+        batch_ids_result = await db.execute(
+            batch_query.offset((page - 1) * page_size).limit(page_size)
+        )
+        batch_ids = [row[0] for row in batch_ids_result.all()]
+        
+        # 获取这些batch的所有图片
+        batches = []
+        for bid in batch_ids:
+            conditions = [
+                DeviceCameraImage.device_id == device_id,
+                DeviceCameraImage.batch_id == bid
+            ]
+            if camera_type is not None:
+                conditions.append(DeviceCameraImage.camera_type == camera_type)
+            
+            images_result = await db.execute(
+                select(DeviceCameraImage)
+                .where(and_(*conditions))
+                .order_by(DeviceCameraImage.camera_type, DeviceCameraImage.image_index)
+            )
+            images = images_result.scalars().all()
+            
+            if images:
+                batch_data = {
+                    "batch_id": bid,
+                    "captured_at": images[0].captured_at.strftime("%Y-%m-%d %H:%M:%S") if images[0].captured_at else None,
+                    "camera_1": [],
+                    "camera_2": [],
+                }
+                for img in images:
+                    camera_key = f"camera_{img.camera_type}"
+                    if camera_key in batch_data:
+                        batch_data[camera_key].append({
+                            "id": img.id,
+                            "image_data": img.image_data,
+                            "image_index": img.image_index,
+                        })
+                batches.append(batch_data)
+        
+        return ResponseModel(data={
+            "items": batches,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": (total + page_size - 1) // page_size if total > 0 else 0,
+        })
+    except Exception as e:
+        logger.error(f"获取设备摄像头图片失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取设备摄像头图片失败: {str(e)}")

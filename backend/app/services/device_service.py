@@ -3,6 +3,7 @@
 """
 import hashlib
 import json
+import uuid
 from datetime import datetime
 from typing import Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from loguru import logger
 
 from app.models.device import Device
+from app.models.device_camera import DeviceCameraImage
 from app.schemas.device import (
     DeviceStatusReport,
     HeartbeatReport,
@@ -264,13 +266,51 @@ class DeviceService:
             is_using = data.get("is_using", 0)
             device.is_using = is_using
             
+            # 保存摄像头图片数据
+            camera_data = data.get("camera_data", {})
+            saved_images = 0
+            if camera_data:
+                batch_id = uuid.uuid4().hex[:16]
+                captured_at = datetime.now()
+                
+                # camera_1: 回收箱内部摄像头
+                camera_1_images = camera_data.get("camera_1", [])
+                for idx, img_base64 in enumerate(camera_1_images):
+                    if img_base64 and len(img_base64) > 10:  # 过滤空数据
+                        img_record = DeviceCameraImage(
+                            device_id=device_id,
+                            camera_type=1,
+                            image_index=idx,
+                            image_data=img_base64,
+                            batch_id=batch_id,
+                            captured_at=captured_at,
+                        )
+                        self.db.add(img_record)
+                        saved_images += 1
+                
+                # camera_2: 用户摄像头
+                camera_2_images = camera_data.get("camera_2", [])
+                for idx, img_base64 in enumerate(camera_2_images):
+                    if img_base64 and len(img_base64) > 10:  # 过滤空数据
+                        img_record = DeviceCameraImage(
+                            device_id=device_id,
+                            camera_type=2,
+                            image_index=idx,
+                            image_data=img_base64,
+                            batch_id=batch_id,
+                            captured_at=captured_at,
+                        )
+                        self.db.add(img_record)
+                        saved_images += 1
+            
             await self.db.commit()
             
             logger.info(
                 f"设备 {device_id} 状态上报处理成功: "
                 f"电量={battery_level}%, 烟感={smoke_sensor_status}, "
                 f"仓满={recycle_bin_full}, 投放窗口={'开' if delivery_window_open else '关'}, "
-                f"使用中={'是' if is_using else '否'}"
+                f"使用中={'是' if is_using else '否'}, "
+                f"保存图片={saved_images}张"
             )
             
             # 4. 构建成功应答

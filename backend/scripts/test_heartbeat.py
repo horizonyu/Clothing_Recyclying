@@ -3,13 +3,18 @@
 测试设备通信接口 - 按照《4G设备-后台通信协议》
 
 测试内容：
-1. 设备常规状态上报（device_status_report）
-2. 设备心跳包上报（heartbeat_report）
-3. 小程序扫码上报（qrcode-report）
+1. 设备常规状态上报（device_status_report）- 无摄像头
+2. 设备常规状态上报（device_status_report）- 含摄像头数据
+3. 设备心跳包上报（heartbeat_report）
+4. 小程序扫码上报（qrcode-report）
+5. MD5校验码验证
 """
 import requests
 import json
 import hashlib
+import struct
+import zlib
+import base64
 from datetime import datetime
 
 # 配置
@@ -47,10 +52,111 @@ def wrap_packet(packet_data: dict) -> str:
     return f"{PACKET_HEADER}{json_str}{PACKET_FOOTER}"
 
 
+def generate_test_png(width=80, height=60, r=0, g=0, b=0, text_label=""):
+    """
+    生成一个有效的测试PNG图片（纯色块+简单条纹作区分）
+    
+    Args:
+        width: 图片宽度
+        height: 图片高度
+        r, g, b: 背景颜色 (0-255)
+        text_label: 标签（仅用于日志说明）
+    
+    Returns:
+        Base64编码的PNG图片字符串
+    """
+    def create_png(w, h, r, g, b):
+        """使用纯Python创建最小PNG"""
+        # PNG签名
+        signature = b'\x89PNG\r\n\x1a\n'
+        
+        # IHDR chunk
+        ihdr_data = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)  # 8bit RGB
+        ihdr_crc = zlib.crc32(b'IHDR' + ihdr_data) & 0xffffffff
+        ihdr = struct.pack('>I', 13) + b'IHDR' + ihdr_data + struct.pack('>I', ihdr_crc)
+        
+        # IDAT chunk - 图片数据
+        raw_data = b''
+        for y in range(h):
+            raw_data += b'\x00'  # filter byte: None
+            for x in range(w):
+                # 添加条纹效果使图片更有辨识度
+                if y < 4:
+                    # 顶部白色条纹
+                    raw_data += bytes([255, 255, 255])
+                elif y >= h - 4:
+                    # 底部深色条纹
+                    raw_data += bytes([max(0, r - 80), max(0, g - 80), max(0, b - 80)])
+                elif x < 4 or x >= w - 4:
+                    # 左右边框
+                    raw_data += bytes([min(255, r + 40), min(255, g + 40), min(255, b + 40)])
+                else:
+                    # 主色块（中心区域加渐变）
+                    factor = 1.0 - abs(y - h/2) / (h/2) * 0.3
+                    raw_data += bytes([
+                        min(255, int(r * factor)),
+                        min(255, int(g * factor)),
+                        min(255, int(b * factor))
+                    ])
+        
+        compressed = zlib.compress(raw_data)
+        idat_crc = zlib.crc32(b'IDAT' + compressed) & 0xffffffff
+        idat = struct.pack('>I', len(compressed)) + b'IDAT' + compressed + struct.pack('>I', idat_crc)
+        
+        # IEND chunk
+        iend_crc = zlib.crc32(b'IEND') & 0xffffffff
+        iend = struct.pack('>I', 0) + b'IEND' + struct.pack('>I', iend_crc)
+        
+        return signature + ihdr + idat + iend
+    
+    png_bytes = create_png(width, height, r, g, b)
+    b64_str = base64.b64encode(png_bytes).decode('utf-8')
+    return b64_str
+
+
+def generate_camera_test_data():
+    """
+    生成模拟摄像头数据
+    
+    camera_1: 回收箱内部摄像头 - 拍摄投递的衣物（3张，不同角度）
+    camera_2: 用户摄像头 - 拍摄使用设备的用户（3张，不同时刻）
+    
+    Returns:
+        camera_data dict
+    """
+    print("  📸 生成测试图片中...")
+    
+    # camera_1: 回收箱内部 - 使用暖色调（模拟衣物颜色）
+    camera_1_images = [
+        generate_test_png(160, 120, r=180, g=120, b=80, text_label="内部-衣物俯视"),
+        generate_test_png(160, 120, r=100, g=140, b=180, text_label="内部-衣物侧视"),
+        generate_test_png(160, 120, r=160, g=100, b=120, text_label="内部-衣物特写"),
+    ]
+    
+    # camera_2: 用户摄像头 - 使用肤色调（模拟人物）
+    camera_2_images = [
+        generate_test_png(160, 120, r=200, g=160, b=130, text_label="用户-正面"),
+        generate_test_png(160, 120, r=180, g=150, b=120, text_label="用户-投递中"),
+        generate_test_png(160, 120, r=190, g=155, b=125, text_label="用户-完成"),
+    ]
+    
+    print(f"  📸 camera_1: {len(camera_1_images)}张 (回收箱内部)")
+    print(f"  📸 camera_2: {len(camera_2_images)}张 (用户画面)")
+    for i, img in enumerate(camera_1_images):
+        print(f"      camera_1[{i}]: {len(img)} bytes Base64")
+    for i, img in enumerate(camera_2_images):
+        print(f"      camera_2[{i}]: {len(img)} bytes Base64")
+    
+    return {
+        "camera_1": camera_1_images,
+        "camera_2": camera_2_images
+    }
+
+
 def test_device_status_report():
-    """测试1：设备常规状态上报"""
+    """测试1：设备常规状态上报（无摄像头数据）"""
     print("=" * 60)
-    print("测试1：设备常规状态上报 (device_status_report)")
+    print("测试1：设备常规状态上报 - 无摄像头 (device_status_report)")
     print("=" * 60)
     
     url = f"{API_BASE_URL}/device/report"
@@ -85,8 +191,7 @@ def test_device_status_report():
     print(f"设备ID: {DEVICE_ID}")
     print(f"时间戳: {report_data['timestamp']}")
     print(f"校验码: {report_data['check_code']}")
-    print(f"\n完整报文（含包头包尾）：")
-    print(wrap_packet(report_data))
+    print(f"摄像头数据: 无")
     print()
     
     try:
@@ -95,20 +200,23 @@ def test_device_status_report():
         print(f"响应: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
         
         if response.status_code == 200 and response.json().get("code") == 0:
-            print("\n✅ 设备状态上报成功！")
+            print("\n✅ 设备状态上报成功！（无摄像头）")
         else:
             print("\n❌ 设备状态上报失败！")
     except Exception as e:
         print(f"\n❌ 请求失败: {e}")
 
 
-def test_device_status_report_using():
-    """测试1b：设备使用中状态上报（带摄像头数据）"""
+def test_device_status_report_with_camera():
+    """测试2：设备使用中状态上报（带摄像头数据）"""
     print("\n" + "=" * 60)
-    print("测试1b：设备使用中状态上报 (is_using=1)")
+    print("测试2：设备状态上报 - 含摄像头数据 (is_using=1)")
     print("=" * 60)
     
     url = f"{API_BASE_URL}/device/report"
+    
+    # 生成摄像头测试图片
+    camera_data = generate_camera_test_data()
     
     report_data = {
         "msg_type": "device_status_report",
@@ -125,40 +233,103 @@ def test_device_status_report_using():
             "recycle_bin_full": 0,
             "delivery_window_open": 1,
             "is_using": 1,
-            "camera_data": {
-                "camera_1": [
-                    "iVBORw0KGgoAAAANSUhEUg==",  # 模拟Base64图片
-                    "iVBORw0KGgoAAAANSUhEUg==",
-                    "iVBORw0KGgoAAAANSUhEUg=="
-                ],
-                "camera_2": [
-                    "iVBORw0KGgoAAAANSUhEUg==",
-                    "iVBORw0KGgoAAAANSUhEUg==",
-                    "iVBORw0KGgoAAAANSUhEUg=="
-                ]
-            }
+            "camera_data": camera_data
         }
     }
     
     report_data["check_code"] = calculate_check_code(report_data)
     
+    print(f"\nURL: {url}")
+    print(f"设备ID: {DEVICE_ID}")
+    print(f"时间戳: {report_data['timestamp']}")
+    print(f"校验码: {report_data['check_code']}")
+    print(f"投放窗口: 已打开")
+    print(f"使用状态: 使用中")
+    print(f"报文大小: {len(json.dumps(report_data))} bytes")
+    print()
+    
     try:
-        response = requests.post(url, json=report_data, timeout=10)
+        response = requests.post(url, json=report_data, timeout=30)
+        print(f"状态码: {response.status_code}")
+        resp_json = response.json()
+        # 只打印非图片部分的响应
+        print(f"响应: {json.dumps(resp_json, indent=2, ensure_ascii=False)}")
+        
+        if response.status_code == 200 and resp_json.get("code") == 0:
+            print("\n✅ 带摄像头数据的设备状态上报成功！")
+            print("   📸 camera_1 (回收箱内部): 3张图片已上传")
+            print("   📸 camera_2 (用户画面): 3张图片已上传")
+        else:
+            print("\n❌ 带摄像头数据的设备状态上报失败！")
+    except Exception as e:
+        print(f"\n❌ 请求失败: {e}")
+
+
+def test_device_status_report_smoke_alarm_with_camera():
+    """测试3：设备烟感告警上报（带摄像头数据，用于确认现场情况）"""
+    print("\n" + "=" * 60)
+    print("测试3：烟感告警上报 - 含摄像头数据 (smoke_sensor_status=1)")
+    print("=" * 60)
+    
+    url = f"{API_BASE_URL}/device/report"
+    
+    # 烟感告警时的摄像头数据（红色调模拟告警场景）
+    print("  📸 生成告警场景测试图片...")
+    camera_data = {
+        "camera_1": [
+            generate_test_png(160, 120, r=200, g=60, b=60, text_label="内部-告警场景1"),
+            generate_test_png(160, 120, r=220, g=80, b=50, text_label="内部-告警场景2"),
+        ],
+        "camera_2": [
+            generate_test_png(160, 120, r=180, g=150, b=120, text_label="外部-现场情况"),
+        ]
+    }
+    print(f"  📸 camera_1: {len(camera_data['camera_1'])}张 (告警现场)")
+    print(f"  📸 camera_2: {len(camera_data['camera_2'])}张 (外部环境)")
+    
+    report_data = {
+        "msg_type": "device_status_report",
+        "device_id": DEVICE_ID,
+        "timestamp": get_timestamp(),
+        "data": {
+            "battery_level": 75,
+            "location": {
+                "longitude": 113.9423,
+                "latitude": 22.5431,
+                "address": "广东省深圳市宝安区XX街道XX路"
+            },
+            "smoke_sensor_status": 1,  # 烟感告警！
+            "recycle_bin_full": 0,
+            "delivery_window_open": 0,
+            "is_using": 0,
+            "camera_data": camera_data
+        }
+    }
+    
+    report_data["check_code"] = calculate_check_code(report_data)
+    
+    print(f"\nURL: {url}")
+    print(f"⚠️  烟感状态: 告警!")
+    print(f"报文大小: {len(json.dumps(report_data))} bytes")
+    print()
+    
+    try:
+        response = requests.post(url, json=report_data, timeout=30)
         print(f"状态码: {response.status_code}")
         print(f"响应: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
         
         if response.status_code == 200 and response.json().get("code") == 0:
-            print("\n✅ 使用中状态上报成功！")
+            print("\n✅ 烟感告警上报成功！（含现场照片）")
         else:
-            print("\n❌ 使用中状态上报失败！")
+            print("\n❌ 烟感告警上报失败！")
     except Exception as e:
         print(f"\n❌ 请求失败: {e}")
 
 
 def test_heartbeat_report():
-    """测试2：设备心跳包上报"""
+    """测试4：设备心跳包上报"""
     print("\n" + "=" * 60)
-    print("测试2：设备心跳包上报 (heartbeat_report)")
+    print("测试4：设备心跳包上报 (heartbeat_report)")
     print("=" * 60)
     
     url = f"{API_BASE_URL}/device/heartbeat"
@@ -201,9 +372,9 @@ def test_heartbeat_report():
 
 
 def test_qrcode_report():
-    """测试3：模拟小程序扫码上报"""
+    """测试5：模拟小程序扫码上报"""
     print("\n" + "=" * 60)
-    print("测试3：小程序扫码上报 (qrcode-report)")
+    print("测试5：小程序扫码上报 (qrcode-report)")
     print("=" * 60)
     
     # 构建设备状态报文（模拟硬件生成的二维码内容）
@@ -240,9 +411,9 @@ def test_qrcode_report():
 
 
 def test_check_code_verification():
-    """测试4：校验码验证"""
+    """测试6：校验码验证"""
     print("\n" + "=" * 60)
-    print("测试4：MD5校验码验证")
+    print("测试6：MD5校验码验证")
     print("=" * 60)
     
     # 正确校验码
@@ -279,28 +450,85 @@ def test_check_code_verification():
     print("\n✅ 校验码验证逻辑正确！")
 
 
+def test_camera_image_generation():
+    """测试7：验证Base64图片生成功能"""
+    print("\n" + "=" * 60)
+    print("测试7：Base64图片生成验证")
+    print("=" * 60)
+    
+    # 生成不同场景的测试图片
+    test_cases = [
+        ("回收箱内部-衣物俯视", 160, 120, 180, 120, 80),
+        ("回收箱内部-衣物侧视", 160, 120, 100, 140, 180),
+        ("用户正面照", 160, 120, 200, 160, 130),
+        ("告警场景", 160, 120, 200, 60, 60),
+    ]
+    
+    for label, w, h, r, g, b in test_cases:
+        b64 = generate_test_png(w, h, r, g, b, text_label=label)
+        raw_bytes = base64.b64decode(b64)
+        
+        # 验证PNG签名
+        is_valid_png = raw_bytes[:8] == b'\x89PNG\r\n\x1a\n'
+        
+        print(f"  [{label}]")
+        print(f"    尺寸: {w}x{h}, 颜色: RGB({r},{g},{b})")
+        print(f"    Base64长度: {len(b64)} chars")
+        print(f"    原始大小: {len(raw_bytes)} bytes")
+        print(f"    PNG格式验证: {'✅ 有效' if is_valid_png else '❌ 无效'}")
+    
+    # 保存一张到本地验证
+    sample = generate_test_png(320, 240, 100, 150, 200)
+    sample_bytes = base64.b64decode(sample)
+    
+    try:
+        with open("/tmp/test_camera_sample.png", "wb") as f:
+            f.write(sample_bytes)
+        print(f"\n  💾 示例图片已保存: /tmp/test_camera_sample.png ({len(sample_bytes)} bytes)")
+        print(f"     可用浏览器打开验证图片是否正确显示")
+    except Exception as e:
+        print(f"\n  ⚠️  保存示例图片失败: {e}")
+    
+    print("\n✅ 图片生成验证完成！")
+
+
 if __name__ == "__main__":
     print("🔧 4G设备-后台通信协议 测试工具")
     print(f"📡 API地址: {API_BASE_URL}")
     print(f"📱 设备ID: {DEVICE_ID}")
     print()
     
-    # 先测试校验码逻辑
+    # 测试图片生成
+    test_camera_image_generation()
+    
+    # 测试校验码逻辑
     test_check_code_verification()
     
-    # 测试设备状态上报
+    # 测试1: 设备状态上报（无摄像头）
     print()
     test_device_status_report()
     
-    # 测试使用中状态上报
-    test_device_status_report_using()
+    # 测试2: 设备状态上报（含摄像头数据）
+    test_device_status_report_with_camera()
     
-    # 测试心跳上报
+    # 测试3: 烟感告警上报（含摄像头数据）
+    test_device_status_report_smoke_alarm_with_camera()
+    
+    # 测试4: 心跳上报
     test_heartbeat_report()
     
-    # 测试扫码上报（需要token，仅展示）
+    # 测试5: 扫码上报（需要token，仅展示）
     test_qrcode_report()
     
     print("\n" + "=" * 60)
     print("测试完成！")
     print("=" * 60)
+    print()
+    print("📌 管理后台验证步骤：")
+    print("   1. 登录管理后台 → 设备管理 → 找到设备 " + DEVICE_ID)
+    print("   2. 点击「详情」进入设备详情页")
+    print("   3. 查看「摄像头画面」区域，应显示最近上报的图片")
+    print("   4. camera_1（回收箱内部）应有3张暖色调图片")
+    print("   5. camera_2（用户画面）应有3张肤色调图片")
+    print("   6. 点击图片可放大预览")
+    print("   7. 点击「查看历史记录」可查看所有上报批次")

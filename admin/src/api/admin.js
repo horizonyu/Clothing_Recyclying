@@ -70,6 +70,15 @@ export function updateDevice(id, data) {
   })
 }
 
+// 获取设备摄像头图片历史
+export function getDeviceCameraImages(deviceId, params) {
+  return request({
+    url: `/device/${deviceId}/camera-images`,
+    method: 'get',
+    params
+  })
+}
+
 // ===== 订单管理 =====
 
 // 获取订单列表

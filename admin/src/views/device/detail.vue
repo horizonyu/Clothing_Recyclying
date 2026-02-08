@@ -44,7 +44,6 @@
 
       <!-- 实时状态卡片 -->
       <el-row :gutter="16" class="status-cards">
-        <!-- 电池电量 -->
         <el-col :xs="12" :sm="8" :md="4">
           <el-card class="status-card" shadow="hover">
             <div class="status-card-inner">
@@ -58,11 +57,8 @@
             </div>
           </el-card>
         </el-col>
-
-        <!-- 烟感状态 -->
         <el-col :xs="12" :sm="8" :md="4">
-          <el-card class="status-card" shadow="hover"
-            :class="{ 'alarm-card': device.smoke_sensor_status === 1 }">
+          <el-card class="status-card" shadow="hover" :class="{ 'alarm-card': device.smoke_sensor_status === 1 }">
             <div class="status-card-inner">
               <div class="status-icon" :style="{ background: device.smoke_sensor_status === 1 ? '#fef0f0' : '#f0f9eb' }">
                 {{ device.smoke_sensor_status === 1 ? '🔥' : '✅' }}
@@ -76,8 +72,6 @@
             </div>
           </el-card>
         </el-col>
-
-        <!-- 仓体状态 -->
         <el-col :xs="12" :sm="8" :md="4">
           <el-card class="status-card" shadow="hover">
             <div class="status-card-inner">
@@ -93,8 +87,6 @@
             </div>
           </el-card>
         </el-col>
-
-        <!-- 投放窗口 -->
         <el-col :xs="12" :sm="8" :md="4">
           <el-card class="status-card" shadow="hover">
             <div class="status-card-inner">
@@ -110,8 +102,6 @@
             </div>
           </el-card>
         </el-col>
-
-        <!-- 使用状态 -->
         <el-col :xs="12" :sm="8" :md="4">
           <el-card class="status-card" shadow="hover">
             <div class="status-card-inner">
@@ -127,8 +117,6 @@
             </div>
           </el-card>
         </el-col>
-
-        <!-- 容量 -->
         <el-col :xs="12" :sm="8" :md="4">
           <el-card class="status-card" shadow="hover">
             <div class="status-card-inner">
@@ -137,6 +125,80 @@
                 <div class="status-value">{{ device.capacity_percent || 0 }}%</div>
                 <div class="status-label">容量占比</div>
               </div>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <!-- 📷 摄像头实时画面 -->
+      <el-row :gutter="16">
+        <el-col :span="24">
+          <el-card>
+            <template #header>
+              <div class="section-header">
+                <span>📷 摄像头画面（最近一次上报）</span>
+                <el-button link type="primary" @click="showCameraHistory = true" v-if="device.camera_total_count > 0">
+                  查看历史记录 ({{ device.camera_total_count }}张) →
+                </el-button>
+              </div>
+            </template>
+
+            <div v-if="hasCameraImages" class="camera-section">
+              <!-- 摄像头1: 回收箱内部 -->
+              <div class="camera-group">
+                <div class="camera-title">
+                  <el-tag type="primary" size="small">摄像头1</el-tag>
+                  <span>回收箱内部</span>
+                </div>
+                <div class="camera-images" v-if="device.camera_images.camera_1.length > 0">
+                  <div
+                    class="camera-image-item"
+                    v-for="(img, idx) in device.camera_images.camera_1"
+                    :key="'c1-' + idx"
+                    @click="previewImage(img.image_data)"
+                  >
+                    <el-image
+                      :src="getImageSrc(img.image_data)"
+                      fit="cover"
+                      :preview-src-list="getCameraPreviewList(1)"
+                      :initial-index="idx"
+                      :preview-teleported="true"
+                    />
+                    <div class="image-time">{{ img.captured_at }}</div>
+                  </div>
+                </div>
+                <div v-else class="no-images">暂无图片</div>
+              </div>
+
+              <!-- 摄像头2: 用户 -->
+              <div class="camera-group">
+                <div class="camera-title">
+                  <el-tag type="success" size="small">摄像头2</el-tag>
+                  <span>用户画面</span>
+                </div>
+                <div class="camera-images" v-if="device.camera_images.camera_2.length > 0">
+                  <div
+                    class="camera-image-item"
+                    v-for="(img, idx) in device.camera_images.camera_2"
+                    :key="'c2-' + idx"
+                    @click="previewImage(img.image_data)"
+                  >
+                    <el-image
+                      :src="getImageSrc(img.image_data)"
+                      fit="cover"
+                      :preview-src-list="getCameraPreviewList(2)"
+                      :initial-index="idx"
+                      :preview-teleported="true"
+                    />
+                    <div class="image-time">{{ img.captured_at }}</div>
+                  </div>
+                </div>
+                <div v-else class="no-images">暂无图片</div>
+              </div>
+            </div>
+
+            <div v-else class="no-camera-data">
+              <el-empty description="暂无摄像头数据" :image-size="80" />
             </div>
           </el-card>
         </el-col>
@@ -188,15 +250,85 @@
         </el-col>
       </el-row>
     </template>
+
+    <!-- 摄像头历史记录弹窗 -->
+    <el-dialog
+      v-model="showCameraHistory"
+      title="📷 摄像头图片历史记录"
+      width="900px"
+      :destroy-on-close="true"
+    >
+      <div v-loading="historyLoading">
+        <div v-if="cameraHistory.length === 0" class="no-camera-data">
+          <el-empty description="暂无历史图片" :image-size="60" />
+        </div>
+        <div v-else>
+          <div v-for="batch in cameraHistory" :key="batch.batch_id" class="history-batch">
+            <div class="batch-header">
+              <el-tag size="small">{{ batch.captured_at }}</el-tag>
+              <span class="batch-id">批次: {{ batch.batch_id }}</span>
+            </div>
+            <el-row :gutter="12">
+              <!-- 摄像头1 -->
+              <el-col :span="12" v-if="batch.camera_1.length > 0">
+                <div class="history-camera-title">
+                  <el-tag type="primary" size="small">摄像头1 - 回收箱内部</el-tag>
+                </div>
+                <div class="history-images">
+                  <el-image
+                    v-for="(img, idx) in batch.camera_1"
+                    :key="'h-c1-' + img.id"
+                    :src="getImageSrc(img.image_data)"
+                    fit="cover"
+                    class="history-image"
+                    :preview-src-list="batch.camera_1.map(i => getImageSrc(i.image_data))"
+                    :initial-index="idx"
+                    :preview-teleported="true"
+                  />
+                </div>
+              </el-col>
+              <!-- 摄像头2 -->
+              <el-col :span="12" v-if="batch.camera_2.length > 0">
+                <div class="history-camera-title">
+                  <el-tag type="success" size="small">摄像头2 - 用户画面</el-tag>
+                </div>
+                <div class="history-images">
+                  <el-image
+                    v-for="(img, idx) in batch.camera_2"
+                    :key="'h-c2-' + img.id"
+                    :src="getImageSrc(img.image_data)"
+                    fit="cover"
+                    class="history-image"
+                    :preview-src-list="batch.camera_2.map(i => getImageSrc(i.image_data))"
+                    :initial-index="idx"
+                    :preview-teleported="true"
+                  />
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+          <!-- 分页 -->
+          <div class="history-pagination">
+            <el-pagination
+              v-model:current-page="historyPage"
+              :page-size="5"
+              :total="historyTotal"
+              layout="prev, pager, next"
+              @current-change="loadCameraHistory"
+            />
+          </div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Refresh } from '@element-plus/icons-vue'
-import { getDeviceDetail } from '@/api/admin'
+import { getDeviceDetail, getDeviceCameraImages } from '@/api/admin'
 import * as echarts from 'echarts'
 
 const route = useRoute()
@@ -204,6 +336,19 @@ const loading = ref(false)
 const device = ref(null)
 const chartRef = ref(null)
 let chartInstance = null
+
+// 摄像头历史
+const showCameraHistory = ref(false)
+const historyLoading = ref(false)
+const cameraHistory = ref([])
+const historyPage = ref(1)
+const historyTotal = ref(0)
+
+const hasCameraImages = computed(() => {
+  if (!device.value || !device.value.camera_images) return false
+  const cam = device.value.camera_images
+  return (cam.camera_1 && cam.camera_1.length > 0) || (cam.camera_2 && cam.camera_2.length > 0)
+})
 
 const getStatusType = (status) => {
   const m = { 'online': 'success', 'offline': 'info', 'maintenance': 'warning', 'error': 'danger' }
@@ -227,6 +372,32 @@ const getBatteryBg = (level) => {
   if (level <= 10) return '#fef0f0'
   if (level <= 20) return '#fdf6ec'
   return '#f0f9eb'
+}
+
+/**
+ * 将Base64图片数据转换为可显示的src
+ * 自动检测是否已有data:前缀
+ */
+const getImageSrc = (base64Data) => {
+  if (!base64Data) return ''
+  if (base64Data.startsWith('data:')) return base64Data
+  // 尝试检测图片类型
+  if (base64Data.startsWith('iVBOR')) return `data:image/png;base64,${base64Data}`
+  if (base64Data.startsWith('/9j/')) return `data:image/jpeg;base64,${base64Data}`
+  if (base64Data.startsWith('R0lGO')) return `data:image/gif;base64,${base64Data}`
+  // 默认当作PNG
+  return `data:image/png;base64,${base64Data}`
+}
+
+const getCameraPreviewList = (cameraType) => {
+  if (!device.value || !device.value.camera_images) return []
+  const key = `camera_${cameraType}`
+  const images = device.value.camera_images[key] || []
+  return images.map(img => getImageSrc(img.image_data))
+}
+
+const previewImage = (base64Data) => {
+  // el-image组件自带preview功能，这里留空备用
 }
 
 const initChart = (dailyOrders) => {
@@ -268,6 +439,31 @@ const loadData = async () => {
   }
 }
 
+const loadCameraHistory = async (page) => {
+  historyLoading.value = true
+  if (page) historyPage.value = page
+  try {
+    const { data } = await getDeviceCameraImages(route.params.id, {
+      page: historyPage.value,
+      page_size: 5,
+    })
+    cameraHistory.value = data.items || []
+    historyTotal.value = data.total || 0
+  } catch (error) {
+    ElMessage.error('加载摄像头历史失败')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+// 打开历史弹窗时自动加载
+watch(showCameraHistory, (val) => {
+  if (val) {
+    historyPage.value = 1
+    loadCameraHistory()
+  }
+})
+
 let refreshTimer = null
 
 onMounted(() => {
@@ -304,9 +500,7 @@ onUnmounted(() => {
   }
 
   .status-card {
-    :deep(.el-card__body) {
-      padding: 16px;
-    }
+    :deep(.el-card__body) { padding: 16px; }
 
     &.alarm-card {
       border: 1px solid #F56C6C;
@@ -331,18 +525,125 @@ onUnmounted(() => {
     }
 
     .status-info {
-      .status-value {
-        font-size: 18px;
-        font-weight: 700;
-        line-height: 1.3;
-      }
-      .status-label {
-        font-size: 12px;
-        color: #909399;
-        margin-top: 2px;
-      }
+      .status-value { font-size: 18px; font-weight: 700; line-height: 1.3; }
+      .status-label { font-size: 12px; color: #909399; margin-top: 2px; }
     }
   }
+
+  // 摄像头区域
+  .camera-section {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .camera-group {
+    .camera-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #303133;
+    }
+
+    .camera-images {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .camera-image-item {
+      width: 200px;
+      cursor: pointer;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #ebeef5;
+      transition: all 0.3s;
+
+      &:hover {
+        border-color: #409eff;
+        box-shadow: 0 2px 12px rgba(64, 158, 255, 0.2);
+        transform: translateY(-2px);
+      }
+
+      :deep(.el-image) {
+        width: 200px;
+        height: 150px;
+        display: block;
+      }
+
+      .image-time {
+        padding: 6px 8px;
+        font-size: 11px;
+        color: #909399;
+        background: #fafafa;
+        text-align: center;
+      }
+    }
+
+    .no-images {
+      color: #c0c4cc;
+      font-size: 13px;
+      padding: 20px;
+      text-align: center;
+      border: 1px dashed #dcdfe6;
+      border-radius: 8px;
+    }
+  }
+
+  .no-camera-data {
+    padding: 20px 0;
+  }
+}
+
+// 历史记录弹窗样式
+.history-batch {
+  padding: 16px 0;
+  border-bottom: 1px solid #ebeef5;
+
+  &:last-child { border-bottom: none; }
+
+  .batch-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+
+    .batch-id {
+      font-size: 12px;
+      color: #c0c4cc;
+    }
+  }
+
+  .history-camera-title {
+    margin-bottom: 8px;
+  }
+
+  .history-images {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .history-image {
+    width: 140px;
+    height: 105px;
+    border-radius: 6px;
+    border: 1px solid #ebeef5;
+    cursor: pointer;
+
+    &:hover {
+      border-color: #409eff;
+    }
+  }
+}
+
+.history-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
 }
 
 @keyframes pulse {
