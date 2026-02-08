@@ -208,8 +208,9 @@ class DeviceService:
         """
         处理设备常规状态上报
         
-        按协议规定：设备第一次被用户使用时（is_using=1），
+        按协议规定：设备首次上报数据时（从未向后台上报过），
         除了返回ack消息，还需返回time_sync消息。
+        判断依据：device.first_report_at 是否为 NULL（而非 is_using 字段）。
         
         Args:
             report_data: 设备状态上报报文（JSON字典）
@@ -231,8 +232,8 @@ class DeviceService:
                 ack = build_server_ack(device_id, "device_status_report", 1, "设备不存在")
                 return False, "设备不存在或未注册", ack, None
             
-            # 记录之前的使用状态，用于判断是否需要下发time_sync
-            previous_is_using = device.is_using or 0
+            # 记录设备是否从未上报过（用于判断是否需要下发time_sync）
+            is_first_report = device.first_report_at is None
             
             # 3. 更新设备状态
             data = report_data.get("data", {})
@@ -319,15 +320,20 @@ class DeviceService:
                 f"保存图片={saved_images}张"
             )
             
+            # 4. 标记首次上报时间
+            if is_first_report:
+                device.first_report_at = datetime.now()
+            
             # 4. 构建成功应答
             ack = build_server_ack(device_id, "device_status_report", 0, "数据接收成功")
             
-            # 5. 按协议：设备首次被用户使用时(is_using从0变为1)，
+            # 5. 按协议：设备首次上报数据时（从未向后台上报过），
             #    除了返回ack消息，还需返回time_sync消息
+            #    判断依据：first_report_at 之前是否为 NULL
             time_sync = None
-            if is_using == 1 and previous_is_using == 0:
+            if is_first_report:
                 time_sync = build_time_sync(device_id)
-                logger.info(f"设备 {device_id} 首次被用户使用，下发时间同步")
+                logger.info(f"设备 {device_id} 首次上报数据，下发时间同步")
             
             return True, "处理成功", ack, time_sync
             

@@ -80,7 +80,7 @@ async def device_status_report(
         # 构建响应数据
         response_data = {"ack": ack}
         
-        # 按协议：设备首次被用户使用时(is_using从0→1)，
+        # 按协议：设备首次上报数据时（从未向后台上报过），
         # 除了返回ack消息，还需返回time_sync消息
         if time_sync:
             response_data["time_sync"] = time_sync

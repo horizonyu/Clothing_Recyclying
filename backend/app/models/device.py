@@ -45,6 +45,9 @@ class Device(Base):
     humidity = Column(Float, nullable=True, comment="湿度")
     smoke_level = Column(Float, nullable=True, comment="烟雾浓度")
     
+    # 首次上报标记
+    first_report_at = Column(DateTime, nullable=True, comment="设备首次上报时间，为NULL表示从未上报过")
+    
     # 待执行命令（后台主动下发，设备通过心跳或轮询获取）
     pending_command = Column(String(50), nullable=True, comment="待执行命令: query_device_status等")
     pending_command_at = Column(DateTime, nullable=True, comment="命令创建时间")
