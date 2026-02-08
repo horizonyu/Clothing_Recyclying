@@ -11,23 +11,32 @@
   - 当 first_report_at 不为 NULL 时，视为非首次上报，后台仅返回 ack。
   注意：is_using 字段仅表示设备当前是否有人使用，与首次上报判断无关。
 
-测试分为两大类：
+通信方式（优先级从高到低）：
+  1. WebSocket 长连接 — ws://server/api/v1/device/ws/{device_id}（推荐）
+  2. HTTP 长轮询 — GET /device/listen/{device_id}（兼容）
+  3. HTTP 短连接 + 数据库排队（兜底）
+
+测试分为三大类：
   [离线测试] 不需要后端服务，本地验证
     P1 - Base64 图片生成验证
     P2 - MD5 校验码计算与验证
 
-  [在线测试] 需要后端 API 服务
+  [在线测试 - HTTP] 需要后端 API 服务
     T1 - 首次上报 (first_report_at=NULL) → 预期: ack + time_sync
     T2 - 非首次上报(含摄像头) → 预期: ack，无 time_sync + 图片保存
     T3 - 持续使用上报 (is_using=1, 含摄像头) → 预期: ack，无 time_sync + 图片保存
     T4 - 烟感告警上报 (smoke=1) → 预期: ack + 告警图片保存
     T5 - 使用结束上报 (is_using: 1→0) → 预期: ack，无 time_sync
     T6 - 心跳上报 (无待执行命令) → 预期: ack + time_sync，无 command
-    T7 - 后台主动查询设备状态 → 完整流程 (排队 → 轮询获取 → 设备响应)
-    T8 - 心跳携带待执行命令 → 预期: ack + time_sync + command
-    T9 - 管理后台主动查询 (admin API) → 预期: 命令排队成功
+    T7 - 长轮询实时查询 → 设备长轮询监听 + 命令推送 + 设备响应
+    T8 - 离线回退查询 → 设备不在线 → 命令排队 → 心跳获取
+    T9 - 管理后台主动查询 (admin API) → 验证 websocket/long_polling/queued
     T10 - 错误校验码上报 → 预期: 校验失败
     T11 - 小程序扫码上报 (仅演示报文格式，需 token)
+
+  [在线测试 - WebSocket] 需要后端 API 服务 + websockets 库
+    T12 - WebSocket 连接 + 心跳 → 验证 ack + time_sync
+    T13 - WebSocket 命令实时推送 → 后台查询 → 设备通过 WS 立即收到
 
   ⚠️ 注意：T1 测试要求设备 first_report_at 字段为 NULL（即从未上报过数据）。
      如需重新测试，请先执行：
@@ -40,6 +49,8 @@
 """
 import sys
 import time
+import threading
+import asyncio
 import requests
 import json
 import hashlib
@@ -47,6 +58,13 @@ import struct
 import zlib
 import base64
 from datetime import datetime
+
+# WebSocket 客户端（可选，用于 T12/T13）
+try:
+    import websockets
+    HAS_WEBSOCKETS = True
+except ImportError:
+    HAS_WEBSOCKETS = False
 
 # ============================================================
 # 配置
@@ -218,6 +236,13 @@ def get_admin_token():
     except Exception:
         pass
     return None
+
+
+def build_ws_url(device_id: str) -> str:
+    """构建 WebSocket URL"""
+    # API_BASE_URL = http://host:port/api/v1  →  ws://host:port/api/v1/device/ws/{id}
+    ws_base = API_BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
+    return f"{ws_base}/device/ws/{device_id}"
 
 
 def print_section(title, width=60):
@@ -625,66 +650,89 @@ def test_T6_heartbeat_report():
         record_result("T6", "心跳上报(time_sync)", False, str(e))
 
 
-def test_T7_query_device_status_flow():
+def test_T7_realtime_query_flow():
     """
-    T7: 后台主动查询设备状态 (完整流程)
-    协议规定: 后台主动下发 query_device_status，设备收到后返回 device_status_report。
+    T7: 后台主动查询设备状态 - 实时下发流程
+    
+    设备通过长轮询 GET /device/listen/{device_id} 保持监听，
+    后台下发 query_device_status 时，命令通过 asyncio.Queue 实时推送。
     
     完整流程:
-      步骤1: 后台调用 /query-status 排队查询命令
-      步骤2: 设备通过 /pending-commands 轮询获取命令
-      步骤3: 再次轮询确认命令已被清除
+      步骤1: 设备启动监听 (后台线程调用 /device/listen)
+      步骤2: 后台下发 query_device_status → 返回 delivery_method=realtime
+      步骤3: 设备端监听立即收到命令 (has_command=true, msg_type=query_device_status)
       步骤4: 设备响应查询，上报 device_status_report
     """
-    print_section("T7: 后台主动查询设备状态 (query_device_status 完整流程)")
-    print("  协议规定: 后台主动下发 query_device_status，设备收到后返回全量状态")
+    print_section("T7: 长轮询实时查询 (HTTP long-polling)")
+    print("  场景: 设备通过 HTTP 长轮询保持监听，后台命令通过 asyncio.Queue 推送")
     print_expected([
-        ("步骤1: POST /query-status", "code=0, 命令已排队"),
-        ("步骤2: GET /pending-commands", "has_command=true, msg_type=query_device_status"),
-        ("步骤3: GET /pending-commands (再次)", "has_command=false (已被取走)"),
+        ("步骤1: 设备启动监听", "GET /device/listen/{id} 连接保持"),
+        ("步骤2: POST /query-status", "code=0, delivery_method=long_polling"),
+        ("步骤3: 设备端收到命令", "has_command=true, msg_type=query_device_status"),
         ("步骤4: POST /report", "code=0, 设备状态更新成功"),
     ])
 
     step_results = [False, False, False, False]
 
-    # 步骤1
-    print("\n  ── 步骤1: 后台下发 query_device_status 命令 ──")
-    query_url = f"{API_BASE_URL}/device/query-status?device_id={DEVICE_ID}"
-    try:
-        s1, r1 = post_json(query_url, {})
-        print(f"  📥 {s1} - {json.dumps(r1, indent=2, ensure_ascii=False)}")
-        step_results[0] = (s1 == 200 and r1.get("code") == 0)
-        print(f"  {'✅' if step_results[0] else '❌'} 命令排队: {'成功' if step_results[0] else '失败'}")
-    except Exception as e:
-        print(f"  ❌ 请求失败: {e}")
-        record_result("T7", "后台主动查询(完整流程)", False, f"步骤1失败: {e}")
+    # 用于线程间通信的容器
+    listen_result = {"status": None, "data": None, "error": None}
+
+    def device_listen_thread():
+        """模拟设备端: 通过长轮询监听命令"""
+        listen_url = f"{API_BASE_URL}/device/listen/{DEVICE_ID}?timeout=15"
+        try:
+            resp = requests.get(listen_url, timeout=20)
+            listen_result["status"] = resp.status_code
+            listen_result["data"] = resp.json()
+        except Exception as e:
+            listen_result["error"] = str(e)
+
+    # 步骤1: 启动设备监听 (后台线程)
+    print("\n  ── 步骤1: 设备启动长轮询监听 ──")
+    listener = threading.Thread(target=device_listen_thread, daemon=True)
+    listener.start()
+    time.sleep(1)  # 等待监听连接建立
+    step_results[0] = listener.is_alive()
+    print(f"  {'✅' if step_results[0] else '❌'} 设备监听线程: "
+          f"{'已启动' if step_results[0] else '启动失败'}")
+
+    if not step_results[0]:
+        record_result("T7", "实时查询(完整流程)", False, "设备监听启动失败")
         return
 
-    # 步骤2
-    print("\n  ── 步骤2: 设备轮询获取待执行命令 ──")
-    poll_url = f"{API_BASE_URL}/device/pending-commands/{DEVICE_ID}"
+    # 步骤2: 后台下发 query_device_status
+    print("\n  ── 步骤2: 后台下发 query_device_status 命令 ──")
+    query_url = f"{API_BASE_URL}/device/query-status?device_id={DEVICE_ID}"
     try:
-        s2, r2 = get_json(poll_url)
+        s2, r2 = post_json(query_url, {})
         print(f"  📥 {s2} - {json.dumps(r2, indent=2, ensure_ascii=False)}")
-        poll_data = r2.get("data", {})
-        has_cmd = poll_data.get("has_command", False)
-        cmd_type = poll_data.get("command", {}).get("msg_type", "") if has_cmd else ""
-        step_results[1] = (has_cmd and cmd_type == "query_device_status")
-        print(f"  {'✅' if step_results[1] else '❌'} 收到命令: has_command={has_cmd}, msg_type={cmd_type}")
+        delivery = r2.get("data", {}).get("delivery_method", "")
+        step_results[1] = (s2 == 200 and r2.get("code") == 0 and delivery == "long_polling")
+        print(f"  {'✅' if step_results[1] else '❌'} delivery_method={delivery} "
+              f"(预期: long_polling)")
     except Exception as e:
         print(f"  ❌ 请求失败: {e}")
+        record_result("T7", "实时查询(完整流程)", False, f"步骤2失败: {e}")
+        return
 
-    # 步骤3
-    print("\n  ── 步骤3: 再次轮询 (应为空，命令不会重复下发) ──")
-    try:
-        s3, r3 = get_json(poll_url)
-        has_cmd_2 = r3.get("data", {}).get("has_command", False)
-        step_results[2] = not has_cmd_2
-        print(f"  {'✅' if step_results[2] else '❌'} 命令已清除: has_command={has_cmd_2} (预期: false)")
-    except Exception as e:
-        print(f"  ❌ 请求失败: {e}")
+    # 步骤3: 等待设备端收到命令
+    print("\n  ── 步骤3: 等待设备端收到命令 ──")
+    listener.join(timeout=10)
+    if listen_result["error"]:
+        print(f"  ❌ 监听出错: {listen_result['error']}")
+    elif listen_result["data"]:
+        resp_data = listen_result["data"].get("data", {})
+        has_cmd = resp_data.get("has_command", False)
+        cmd = resp_data.get("command", {})
+        cmd_type = cmd.get("msg_type", "")
+        step_results[2] = (has_cmd and cmd_type == "query_device_status")
+        print(f"  📥 设备收到: has_command={has_cmd}, msg_type={cmd_type}")
+        print(f"  {'✅' if step_results[2] else '❌'} 命令实时到达: "
+              f"{'成功' if step_results[2] else '失败'}")
+    else:
+        print(f"  ❌ 设备端未收到任何响应")
 
-    # 步骤4
+    # 步骤4: 设备响应查询，上报完整状态
     print("\n  ── 步骤4: 设备响应查询，上报完整状态 ──")
     report_url = f"{API_BASE_URL}/device/report"
     report = build_status_report(battery=82, is_using=0)
@@ -692,53 +740,64 @@ def test_T7_query_device_status_flow():
         s4, r4 = post_json(report_url, report)
         print(f"  📥 {s4} - {r4.get('message', '')}")
         step_results[3] = (s4 == 200 and r4.get("code") == 0)
-        print(f"  {'✅' if step_results[3] else '❌'} 设备响应上报: {'成功' if step_results[3] else '失败'}")
+        print(f"  {'✅' if step_results[3] else '❌'} 设备响应上报: "
+              f"{'成功' if step_results[3] else '失败'}")
     except Exception as e:
         print(f"  ❌ 请求失败: {e}")
 
     all_pass = all(step_results)
+    detail_parts = ["监听", "下发realtime", "实时收到", "上报响应"]
     detail = "、".join([
-        f"步骤{i+1}{'✅' if r else '❌'}" for i, r in enumerate(step_results)
+        f"{detail_parts[i]}{'✅' if r else '❌'}" for i, r in enumerate(step_results)
     ])
-    record_result("T7", "后台主动查询(完整流程)", all_pass, detail)
+    record_result("T7", "长轮询实时查询", all_pass, detail)
 
 
-def test_T8_heartbeat_with_pending_command():
+def test_T8_offline_fallback_query():
     """
-    T8: 心跳自动携带待执行命令
-    协议规定: 设备心跳时，后台检查是否有待执行命令，有则一并下发。
+    T8: 后台主动查询 - 离线回退流程
+    
+    设备不在线（无活跃的长轮询连接）时，命令回退到 pending_command 队列，
+    设备在下次心跳时自动获取。
     
     流程:
-      步骤1: 排队 query_device_status 命令
-      步骤2: 设备发送心跳
-      步骤3: 验证心跳响应中包含 ack + time_sync + command
+      步骤1: 下发 query_device_status (设备不在线) → delivery_method=queued
+      步骤2: 设备发送心跳 → 心跳响应中携带 command
+      步骤3: 验证心跳响应包含 ack + time_sync + command(query_device_status)
     """
-    print_section("T8: 心跳携带待执行命令")
-    print("  场景: 先排队命令，设备心跳时自动获取")
+    print_section("T8: 后台主动查询 (离线回退 → 心跳携带)")
+    print("  场景: 设备不在线，命令排队，心跳时自动获取")
     print_expected([
-        ("步骤1: 命令排队", "成功"),
+        ("步骤1: POST /query-status", "code=0, delivery_method=queued"),
         ("步骤2: 心跳响应 data.ack", "存在"),
         ("步骤2: 心跳响应 data.time_sync", "存在"),
         ("步骤2: 心跳响应 data.command", "存在 (query_device_status)"),
         ("步骤2: command.msg_type", "query_device_status"),
     ])
 
-    # 步骤1
-    print("\n  ── 步骤1: 排队 query_device_status 命令 ──")
+    # 步骤1: 下发命令 (设备不在线，应回退排队)
+    print("\n  ── 步骤1: 下发命令 (设备不在线) ──")
     query_url = f"{API_BASE_URL}/device/query-status?device_id={DEVICE_ID}"
     try:
         s1, r1 = post_json(query_url, {})
+        delivery = r1.get("data", {}).get("delivery_method", "")
         queue_ok = (s1 == 200 and r1.get("code") == 0)
-        print(f"  {'✅' if queue_ok else '❌'} 命令排队: {'成功' if queue_ok else '失败'}")
+        print(f"  📥 delivery_method={delivery}")
+        print(f"  {'✅' if queue_ok else '❌'} 命令下发: "
+              f"{'成功' if queue_ok else '失败'}")
+        if delivery == "queued":
+            print(f"  ℹ️  设备不在线，命令已排队等待心跳获取")
+        elif delivery == "realtime":
+            print(f"  ⚠️  设备意外在线（可能有残留监听），测试继续")
         if not queue_ok:
-            record_result("T8", "心跳携带待执行命令", False, "命令排队失败")
+            record_result("T8", "离线回退(心跳携带)", False, "命令下发失败")
             return
     except Exception as e:
         print(f"  ❌ 请求失败: {e}")
-        record_result("T8", "心跳携带待执行命令", False, str(e))
+        record_result("T8", "离线回退(心跳携带)", False, str(e))
         return
 
-    # 步骤2
+    # 步骤2: 设备发送心跳，应自动获取排队的命令
     print("\n  ── 步骤2: 设备发送心跳 ──")
     url = f"{API_BASE_URL}/device/heartbeat"
     hb = build_heartbeat()
@@ -762,23 +821,23 @@ def test_T8_heartbeat_with_pending_command():
              cmd_type == "query_device_status"),
         ]
         ok = print_actual(checks)
-        record_result("T8", "心跳携带待执行命令", ok)
+        record_result("T8", "离线回退(心跳携带)", ok)
     except Exception as e:
         print(f"  ❌ 请求失败: {e}")
-        record_result("T8", "心跳携带待执行命令", False, str(e))
+        record_result("T8", "离线回退(心跳携带)", False, str(e))
 
 
 def test_T9_admin_query_device_status():
     """
     T9: 管理后台主动查询设备状态 (admin API)
     场景: 管理员通过后台管理系统点击「主动查询设备状态」按钮
-    预期: 命令排队成功，设备在下次心跳时获取
+    预期: 命令下发成功，返回 delivery_method（realtime 或 queued）
     """
     print_section("T9: 管理后台主动查询 (admin API)")
     print("  场景: 管理员登录后台 → 设备详情 → 点击「主动查询设备状态」")
     print_expected([
         ("admin 登录", "获取 JWT token"),
-        ("POST /admin/device/query-status", "code=0, 命令已排队"),
+        ("POST /admin/device/query-status", "code=0, delivery_method 有值"),
     ])
 
     # 获取 admin token
@@ -794,9 +853,10 @@ def test_T9_admin_query_device_status():
         try:
             s, r = post_json(query_url, {})
             ok = (s == 200 and r.get("code") == 0)
-            print(f"  📥 {s} - {r.get('message', '')}")
+            delivery = r.get("data", {}).get("delivery_method", "")
+            print(f"  📥 {s} - {r.get('message', '')} (delivery={delivery})")
             record_result("T9", "管理后台主动查询", ok,
-                          "使用设备通信接口代替(admin登录失败)")
+                          f"使用设备通信接口代替(admin登录失败), delivery={delivery}")
         except Exception as e:
             record_result("T9", "管理后台主动查询", False, str(e))
         return
@@ -810,10 +870,13 @@ def test_T9_admin_query_device_status():
         s, r = resp.status_code, resp.json()
         print(f"  📥 {s} - {json.dumps(r, indent=2, ensure_ascii=False)}")
 
+        delivery = r.get("data", {}).get("delivery_method", "")
         ok = (s == 200 and r.get("code") == 0)
         checks = [
             ("HTTP 状态码", s, 200, s == 200),
             ("code", r.get("code"), 0, r.get("code") == 0),
+            ("delivery_method", delivery or "无", "websocket/long_polling/queued",
+             delivery in ("websocket", "long_polling", "queued")),
         ]
         ok = print_actual(checks)
         record_result("T9", "管理后台主动查询", ok)
@@ -901,6 +964,178 @@ def test_T11_qrcode_report_demo():
 
 
 # ============================================================
+# WebSocket 测试用例
+# ============================================================
+
+def test_T12_websocket_heartbeat():
+    """
+    T12: WebSocket 基本连接 + 心跳
+    
+    验证设备通过 WebSocket 长连接发送心跳后，
+    后台返回 ack + time_sync 响应。
+    """
+    if not HAS_WEBSOCKETS:
+        print_section("T12: WebSocket 连接 + 心跳")
+        print("  ⚠️  websockets 库未安装, 跳过测试")
+        print("  💡 安装: pip install websockets")
+        record_result("T12", "WebSocket 心跳", False, "websockets 库未安装")
+        return
+
+    print_section("T12: WebSocket 连接 + 心跳")
+    print("  场景: 设备通过 WebSocket 长连接发送心跳")
+    print_expected([
+        ("WebSocket 连接", "成功建立"),
+        ("发送 heartbeat_report", "通过 WebSocket 发送"),
+        ("收到 server_ack", "msg_type=server_ack"),
+        ("收到 time_sync", "msg_type=time_sync"),
+    ])
+
+    async def run_ws_heartbeat():
+        ws_url = build_ws_url(DEVICE_ID)
+        print(f"\n  📡 连接地址: {ws_url}")
+
+        async with websockets.connect(ws_url, open_timeout=10) as ws:
+            print(f"  ✅ WebSocket 连接已建立")
+
+            # 发送心跳
+            hb = build_heartbeat()
+            await ws.send(json.dumps(hb, ensure_ascii=False))
+            print(f"  📤 已发送 heartbeat_report")
+
+            # 接收 ack
+            ack_raw = await asyncio.wait_for(ws.recv(), timeout=5)
+            ack = json.loads(ack_raw)
+            print(f"  📥 收到 ack: msg_type={ack.get('msg_type', '?')}")
+
+            # 接收 time_sync
+            ts_raw = await asyncio.wait_for(ws.recv(), timeout=5)
+            ts = json.loads(ts_raw)
+            print(f"  📥 收到 time_sync: msg_type={ts.get('msg_type', '?')}")
+
+            return ack, ts
+
+    try:
+        ack, ts = asyncio.run(run_ws_heartbeat())
+
+        checks = [
+            ("ack.msg_type", ack.get("msg_type", ""), "server_ack",
+             ack.get("msg_type") == "server_ack"),
+            ("ack.data.ack_code", ack.get("data", {}).get("ack_code", -1), 0,
+             ack.get("data", {}).get("ack_code") == 0),
+            ("time_sync.msg_type", ts.get("msg_type", ""), "time_sync",
+             ts.get("msg_type") == "time_sync"),
+            ("time_sync.data.standard_time", "存在" if ts.get("data", {}).get("standard_time") else "不存在",
+             "存在", bool(ts.get("data", {}).get("standard_time"))),
+        ]
+        ok = print_actual(checks)
+        sync_time = ts.get("data", {}).get("standard_time", "")
+        record_result("T12", "WebSocket 心跳", ok, f"同步时间: {sync_time}")
+    except Exception as e:
+        print(f"  ❌ WebSocket 测试失败: {e}")
+        record_result("T12", "WebSocket 心跳", False, str(e))
+
+
+def test_T13_websocket_command_push():
+    """
+    T13: WebSocket 命令实时推送
+    
+    验证后台下发 query_device_status 命令时，
+    已通过 WebSocket 连接的设备能实时收到命令。
+    
+    流程:
+      步骤1: 设备通过 WebSocket 连接 (后台线程)
+      步骤2: 后台下发 query_device_status → delivery_method=websocket
+      步骤3: 设备通过 WebSocket 立即收到命令
+    """
+    if not HAS_WEBSOCKETS:
+        print_section("T13: WebSocket 命令实时推送")
+        print("  ⚠️  websockets 库未安装, 跳过测试")
+        record_result("T13", "WebSocket 命令推送", False, "websockets 库未安装")
+        return
+
+    print_section("T13: WebSocket 命令实时推送")
+    print("  场景: 设备 WebSocket 在线 → 后台下发查询 → 设备通过 WS 实时收到命令")
+    print_expected([
+        ("步骤1: WebSocket 连接", "成功建立"),
+        ("步骤2: POST /query-status", "delivery_method=websocket"),
+        ("步骤3: 设备收到命令", "msg_type=query_device_status"),
+    ])
+
+    step_results = [False, False, False]
+    ws_received = {"command": None, "error": None}
+
+    def ws_listener_thread():
+        """设备端: 通过 WebSocket 连接并等待命令"""
+        async def listen():
+            ws_url = build_ws_url(DEVICE_ID)
+            async with websockets.connect(ws_url, open_timeout=10) as ws:
+                # 通知主线程连接已建立
+                ws_received["connected"] = True
+                # 等待后台推送命令
+                raw = await asyncio.wait_for(ws.recv(), timeout=15)
+                return json.loads(raw)
+
+        try:
+            ws_received["command"] = asyncio.run(listen())
+        except Exception as e:
+            ws_received["error"] = str(e)
+
+    # 步骤1: 设备通过 WebSocket 连接
+    print(f"\n  ── 步骤1: 设备通过 WebSocket 连接 ──")
+    ws_received["connected"] = False
+    ws_thread = threading.Thread(target=ws_listener_thread, daemon=True)
+    ws_thread.start()
+
+    # 等待 WebSocket 连接建立
+    for _ in range(20):
+        time.sleep(0.5)
+        if ws_received.get("connected"):
+            break
+    step_results[0] = ws_received.get("connected", False)
+    print(f"  {'✅' if step_results[0] else '❌'} WebSocket 连接: "
+          f"{'已建立' if step_results[0] else '建立失败'}")
+
+    if not step_results[0]:
+        record_result("T13", "WebSocket 命令推送", False, "WebSocket 连接建立失败")
+        return
+
+    # 步骤2: 后台下发 query_device_status
+    print(f"\n  ── 步骤2: 后台下发 query_device_status ──")
+    query_url = f"{API_BASE_URL}/device/query-status?device_id={DEVICE_ID}"
+    try:
+        s2, r2 = post_json(query_url, {})
+        delivery = r2.get("data", {}).get("delivery_method", "")
+        step_results[1] = (s2 == 200 and r2.get("code") == 0 and delivery == "websocket")
+        print(f"  📥 delivery_method={delivery} (预期: websocket)")
+        print(f"  {'✅' if step_results[1] else '❌'} 命令下发: {delivery}")
+    except Exception as e:
+        print(f"  ❌ 请求失败: {e}")
+        record_result("T13", "WebSocket 命令推送", False, f"步骤2失败: {e}")
+        return
+
+    # 步骤3: 等待设备收到命令
+    print(f"\n  ── 步骤3: 等待设备通过 WebSocket 收到命令 ──")
+    ws_thread.join(timeout=15)
+
+    cmd = ws_received.get("command")
+    if ws_received.get("error"):
+        print(f"  ❌ WebSocket 监听出错: {ws_received['error']}")
+    elif cmd:
+        cmd_type = cmd.get("msg_type", "")
+        step_results[2] = (cmd_type == "query_device_status")
+        print(f"  📥 收到命令: msg_type={cmd_type}")
+        print(f"  {'✅' if step_results[2] else '❌'} 命令类型: {cmd_type} "
+              f"(预期: query_device_status)")
+    else:
+        print(f"  ❌ 设备端未收到任何命令")
+
+    all_pass = all(step_results)
+    labels = ["WS连接", "下发websocket", "WS收到命令"]
+    detail = "、".join(f"{labels[i]}{'✅' if r else '❌'}" for i, r in enumerate(step_results))
+    record_result("T13", "WebSocket 命令推送", all_pass, detail)
+
+
+# ============================================================
 # 测试结果汇总
 # ============================================================
 
@@ -935,13 +1170,15 @@ def print_summary():
     print(f"  📋 协议功能覆盖")
     print(f"{'━' * 70}")
     features = [
-        ("上行: device_status_report", "T1/T2/T3/T4/T5", "设备状态上报(含各种场景)"),
-        ("上行: heartbeat_report", "T6/T8", "心跳上报 + 时间同步"),
-        ("下行: server_ack", "T1~T10", "所有上报接口的应答"),
+        ("上行: device_status_report", "T1~T5", "设备状态上报(含各种场景)"),
+        ("上行: heartbeat_report", "T6/T8/T12", "心跳上报 + 时间同步"),
+        ("下行: server_ack", "T1~T10/T12", "所有上报接口的应答"),
         ("下行: time_sync (首次上报)", "T1", "first_report_at为NULL时下发"),
-        ("下行: time_sync (心跳)", "T6/T8", "收到心跳后下发"),
-        ("下行: query_device_status", "T7/T8/T9", "后台主动查询"),
-        ("功能: pending_command", "T7/T8", "命令排队 + 心跳/轮询获取"),
+        ("下行: time_sync (心跳)", "T6/T8/T12", "收到心跳后下发"),
+        ("下行: query_device_status", "T7~T9/T13", "后台主动查询(WS+LP+离线)"),
+        ("通道: WebSocket 长连接", "T12/T13", "双向长连接(推荐)"),
+        ("通道: HTTP 长轮询", "T7", "asyncio.Queue实时推送(兼容)"),
+        ("通道: 离线回退排队", "T8", "命令排队+心跳获取(兜底)"),
         ("功能: camera_data", "T2/T3/T4", "摄像头图片Base64存储"),
         ("功能: MD5 校验", "P2/T10", "校验码计算与验证"),
         ("功能: 管理后台查询", "T9", "admin API 主动查询"),
@@ -956,7 +1193,11 @@ def print_summary():
     print(f"  1. 登录管理后台 → 设备管理 → 找到设备 {DEVICE_ID}")
     print(f"  2. 查看设备状态是否与最后一次上报数据一致")
     print(f"  3. 点击「详情」→ 查看「摄像头画面」区域")
-    print(f"  4. 点击「主动查询设备状态」按钮，验证命令下发")
+    print(f"  4. 点击「主动查询设备状态」按钮")
+    print(f"     → WebSocket 在线: 提示「通过 WebSocket 实时下发」")
+    print(f"     → 长轮询在线: 提示「通过长轮询实时下发」")
+    print(f"     → 设备离线: 提示「设备不在线，命令已排队」")
+    print(f"  7. 设备列表「连接」列显示: WS(WebSocket) / LP(长轮询) / 离线")
     print(f"  5. 点击图片可放大预览")
     print(f"  6. 点击「查看历史记录」查看所有上报批次")
     print()
@@ -1036,11 +1277,11 @@ if __name__ == "__main__":
     # T6: 心跳上报 → ack + time_sync
     test_T6_heartbeat_report()
 
-    # T7: 后台主动查询 → 完整流程
-    test_T7_query_device_status_flow()
+    # T7: 后台主动查询 → 实时下发流程 (长轮询)
+    test_T7_realtime_query_flow()
 
-    # T8: 心跳携带 pending command
-    test_T8_heartbeat_with_pending_command()
+    # T8: 后台主动查询 → 离线回退流程 (排队 + 心跳获取)
+    test_T8_offline_fallback_query()
 
     # T9: 管理后台主动查询 (admin API)
     test_T9_admin_query_device_status()
@@ -1050,6 +1291,17 @@ if __name__ == "__main__":
 
     # T11: 扫码上报演示
     test_T11_qrcode_report_demo()
+
+    # ========== WebSocket 测试 ==========
+    print(f"\n\n{'▓' * 60}")
+    print(f"  第三部分: WebSocket 测试 (需要 websockets 库)")
+    print(f"{'▓' * 60}")
+
+    # T12: WebSocket 连接 + 心跳
+    test_T12_websocket_heartbeat()
+
+    # T13: WebSocket 命令实时推送
+    test_T13_websocket_command_push()
 
     # ========== 汇总 ==========
     print_summary()

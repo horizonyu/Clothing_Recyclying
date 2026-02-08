@@ -56,6 +56,13 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="连接" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.connection_type === 'websocket'" type="success" size="small">WS</el-tag>
+            <el-tag v-else-if="row.connection_type === 'long_polling'" size="small">LP</el-tag>
+            <el-tag v-else type="info" size="small">离线</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="电量" width="100" align="center">
           <template #default="{ row }">
             <div class="battery-cell" v-if="row.battery_level != null">
@@ -227,16 +234,23 @@ const handleReset = () => {
 
 const handleQueryStatus = async (row) => {
   try {
-    await queryDeviceStatus(row.device_id)
-    ElMessage.success({
-      message: `已向 ${row.device_id} 下发查询指令，设备将在下次心跳时上报最新状态`,
-      duration: 4000,
-    })
-    // 5秒后自动刷新列表
-    setTimeout(() => {
-      loadStats()
-      loadData()
-    }, 5000)
+    const { data } = await queryDeviceStatus(row.device_id)
+    const method = data?.delivery_method
+    
+    if (method === 'websocket' || method === 'long_polling') {
+      const via = method === 'websocket' ? 'WebSocket' : '长轮询'
+      ElMessage.success({
+        message: `查询命令已通过 ${via} 实时下发到 ${row.device_id}，正在等待响应...`,
+        duration: 3000,
+      })
+      setTimeout(() => { loadStats(); loadData() }, 3000)
+    } else {
+      ElMessage.warning({
+        message: `${row.device_id} 当前不在线，命令已排队，设备上线后将自动响应`,
+        duration: 5000,
+      })
+      setTimeout(() => { loadStats(); loadData() }, 10000)
+    }
   } catch (error) {
     ElMessage.error('下发查询指令失败')
   }

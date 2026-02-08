@@ -2,20 +2,31 @@
 设备通信API - 按照《4G设备-后台通信协议》实现
 
 协议概述：
-- 采用TCP长连接通信（HTTP接口兼容），数据传输格式为JSON
+- 支持 WebSocket 长连接 和 HTTP 短连接两种通信方式
+- 数据传输格式为JSON
 - 报文格式：包头(0x6868) + JSON数据体 + 校验位(check_code) + 包尾(0x1616)
 - 校验算法：MD5
+
+通信方式（优先级从高到低）：
+1. WebSocket 长连接 ws://server/api/v1/device/ws/{device_id}（推荐）
+   - 设备与后台建立持久双向连接，心跳/状态上报/命令接收全部走同一通道
+2. HTTP 长轮询 GET /device/listen/{device_id}（兼容）
+   - 设备周期性发起长轮询请求，等待后台命令推送
+3. HTTP 短连接 POST /device/report, /device/heartbeat（兜底）
+   - 传统请求-响应模式
 
 报文类型：
 - 上行（设备→后台）：device_status_report（常规状态上报）、heartbeat_report（心跳上报）
 - 下行（后台→设备）：server_ack（应答）、time_sync（时间同步）、query_device_status（查询）
 """
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 import json
 
-from app.db.database import get_db
+from app.db.database import get_db, AsyncSessionLocal
 from app.schemas.common import ResponseModel
 from app.schemas.device import (
     DeviceStatusReport,
@@ -31,6 +42,7 @@ from app.services.device_service import (
     build_time_sync,
     build_query_device_status,
     wrap_packet,
+    connection_manager,
 )
 from app.api.deps import get_current_user
 from app.models.user import User
@@ -255,7 +267,176 @@ async def qrcode_device_report(
         )
 
 
-# ===== 三、后台下发接口（管理端调用） =====
+# ===== 三、设备 WebSocket 长连接 =====
+
+@router.websocket("/ws/{device_id}")
+async def device_websocket(websocket: WebSocket, device_id: str):
+    """
+    设备 WebSocket 统一通信端点（推荐使用）
+    
+    建立持久双向长连接。设备连接后，所有上行（心跳、状态上报）和
+    下行（应答、时间同步、查询命令）消息都通过此连接传输。
+    
+    上行消息（设备→后台）：
+    - heartbeat_report  — 心跳包（建议每8小时一次，保活可更频繁）
+    - device_status_report — 状态上报（含传感器和摄像头数据）
+    
+    下行消息（后台→设备）：
+    - server_ack — 应答
+    - time_sync — 时间同步
+    - query_device_status — 后台主动查询指令（实时推送）
+    
+    消息格式：
+    - 设备发送纯 JSON 文本，或带包头包尾的报文（0x6868{JSON}0x1616）
+    - 后台回复纯 JSON 对象
+    
+    连接断开时自动标记设备为离线。
+    """
+    await websocket.accept()
+    await connection_manager.ws_connect(device_id, websocket)
+    
+    # 上线处理
+    try:
+        async with AsyncSessionLocal() as db:
+            device_service = DeviceService(db)
+            device = await device_service.get_device(device_id)
+            if device:
+                device.status = "online"
+                device.last_heartbeat = datetime.now()
+                await db.commit()
+                logger.info(f"[WS] 设备 {device_id} 上线")
+            else:
+                logger.warning(f"[WS] 未注册设备 {device_id} 尝试连接")
+    except Exception as e:
+        logger.error(f"[WS] 设备 {device_id} 上线处理异常: {e}")
+    
+    try:
+        while True:
+            raw_text = await websocket.receive_text()
+            
+            # 解析消息（支持带/不带包头包尾）
+            try:
+                json_str = strip_packet_wrapper(raw_text) if raw_text.startswith("0x6868") else raw_text
+                data = json.loads(json_str)
+            except (json.JSONDecodeError, Exception) as e:
+                err_ack = build_server_ack(device_id, "unknown", 1, f"消息格式错误: {str(e)}")
+                await websocket.send_json(err_ack)
+                continue
+            
+            msg_type = data.get("msg_type", "")
+            logger.debug(f"[WS] 设备 {device_id} 收到消息: {msg_type}")
+            
+            # 每条消息使用独立的数据库会话
+            try:
+                async with AsyncSessionLocal() as db:
+                    device_service = DeviceService(db)
+                    
+                    if msg_type == "heartbeat_report":
+                        success, message, ack, time_sync, pending_cmd = \
+                            await device_service.process_heartbeat_report(data)
+                        await websocket.send_json(ack)
+                        await websocket.send_json(time_sync)
+                        if pending_cmd:
+                            await websocket.send_json(pending_cmd)
+                    
+                    elif msg_type == "device_status_report":
+                        success, message, ack, time_sync = \
+                            await device_service.process_device_status_report(data)
+                        await websocket.send_json(ack)
+                        if time_sync:
+                            await websocket.send_json(time_sync)
+                    
+                    else:
+                        err_ack = build_server_ack(device_id, msg_type, 1, f"未知消息类型: {msg_type}")
+                        await websocket.send_json(err_ack)
+            except Exception as e:
+                logger.error(f"[WS] 处理设备 {device_id} 消息 {msg_type} 异常: {e}", exc_info=True)
+                err_ack = build_server_ack(device_id, msg_type, 1, f"处理异常: {str(e)}")
+                try:
+                    await websocket.send_json(err_ack)
+                except Exception:
+                    break
+    
+    except WebSocketDisconnect:
+        logger.info(f"[WS] 设备 {device_id} 正常断开连接")
+    except Exception as e:
+        logger.error(f"[WS] 设备 {device_id} 连接异常: {e}", exc_info=True)
+    finally:
+        connection_manager.ws_disconnect(device_id)
+        # 离线处理
+        try:
+            async with AsyncSessionLocal() as db:
+                device_service = DeviceService(db)
+                device = await device_service.get_device(device_id)
+                if device:
+                    device.status = "offline"
+                    await db.commit()
+                    logger.info(f"[WS] 设备 {device_id} 已标记为离线")
+        except Exception as e:
+            logger.error(f"[WS] 设备 {device_id} 离线处理异常: {e}")
+
+
+# ===== 四、设备长轮询监听接口（向下兼容） =====
+
+@router.get("/listen/{device_id}", response_model=ResponseModel)
+async def device_listen(
+    device_id: str,
+    timeout: int = Query(60, ge=5, le=120, description="长轮询超时时间(秒)")
+):
+    """
+    设备长轮询监听命令（向下兼容，推荐使用 WebSocket 接口）
+    
+    如果设备不支持 WebSocket，可使用此接口保持监听。
+    设备启动后应持续调用此接口。当后台管理员下发命令时，
+    命令会通过此连接实时推送到设备。
+    
+    工作流程：
+    1. 设备调用此接口，连接保持挂起状态（最长 timeout 秒）
+    2. 如果后台有命令下发 → 立即返回命令报文，设备收到后执行
+    3. 如果超时无命令 → 返回空响应，设备应立即重新连接
+    
+    参数：
+    - device_id: 设备编号
+    - timeout: 长轮询超时时间，默认60秒，范围5~120秒
+    """
+    channel = connection_manager.get_lp_channel(device_id)
+    logger.info(f"[LP] 设备 {device_id} 开始长轮询监听 (timeout={timeout}s)")
+    
+    try:
+        # 阻塞等待命令，超时则返回空
+        command = await asyncio.wait_for(channel.get(), timeout=timeout)
+        
+        full_packet = wrap_packet(command)
+        logger.info(f"[LP] 向设备 {device_id} 下发命令: {command.get('msg_type', 'unknown')}")
+        
+        return ResponseModel(
+            code=0,
+            message="收到命令，请立即执行",
+            data={
+                "has_command": True,
+                "command": command,
+                "full_packet": full_packet
+            }
+        )
+    except asyncio.TimeoutError:
+        return ResponseModel(
+            code=0,
+            message="无待执行命令",
+            data={
+                "has_command": False
+            }
+        )
+    except Exception as e:
+        logger.error(f"[LP] 设备 {device_id} 监听异常: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": 10000, "message": f"服务器内部错误: {str(e)}"}
+        )
+    finally:
+        pass
+
+
+# ===== 五、后台下发接口（管理端调用） =====
 
 @router.post("/query-status", response_model=ResponseModel)
 async def query_device_status(
@@ -263,56 +444,63 @@ async def query_device_status(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    后台主动查询设备状态
+    后台主动查询设备状态（实时下发）
     
     触发条件：后台运维、业务需要时，主动下发查询指令。
-    设备收到后，立即上报全量常规状态（device_status_report），
-    后台通过 /report 接口接收并更新设备信息。
+    设备收到后，立即采集并上报全量常规状态（device_status_report），
+    后台通过 /report 接口（或 WebSocket）接收并更新设备信息。
     
-    工作流程：
-    1. 后台调用此接口，生成 query_device_status 报文
-    2. 命令被保存到设备的 pending_command 队列
-    3. 设备通过以下两种方式获取命令：
-       a. 下次心跳上报时，心跳响应中会携带该命令
-       b. 设备主动轮询 /device/pending-commands/{device_id} 获取
-    4. 设备收到命令后，上报 device_status_report
-    5. 后台通过 /report 接口处理并更新设备状态
+    命令下发优先级：
+    1. WebSocket 长连接 → 直接推送，设备立即收到
+    2. HTTP 长轮询 → 推入 Queue，设备长轮询立即返回
+    3. 数据库排队 → 写入 pending_command，设备下次心跳时获取
     
-    返回：query_device_status 报文（含完整包头包尾格式）
+    返回：query_device_status 报文 + 下发方式（websocket/long_polling/queued）
     """
     try:
         device_service = DeviceService(db)
-        device = await device_service.get_device(device_id)
         
-        if not device:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": 10001, "message": "设备不存在"}
-            )
+        # 使用 send_command 方法：优先实时推送，离线回退排队
+        success, delivery_method = await device_service.send_command(device_id, "query_device_status")
         
-        # 1. 构建查询报文
+        if not success:
+            if delivery_method == "device_not_found":
+                raise HTTPException(
+                    status_code=404,
+                    detail={"code": 10001, "message": "设备不存在"}
+                )
+            raise HTTPException(status_code=500, detail="命令发送失败")
+        
         query_data = build_query_device_status(device_id)
         full_packet = wrap_packet(query_data)
         
-        # 2. 将命令排队到设备，等待设备获取
-        await device_service.queue_command(device_id, "query_device_status")
+        method_info = {
+            "websocket": ("查询命令已通过 WebSocket 实时下发到设备", "WebSocket 实时推送"),
+            "long_polling": ("查询命令已通过长轮询实时下发到设备", "长轮询实时推送"),
+            "queued": ("设备当前不在线，命令已排队，设备上线后将自动获取", "排队等待（设备离线）"),
+        }
+        message, delivery_desc = method_info.get(
+            delivery_method, ("命令已发送", delivery_method)
+        )
         
-        logger.info(f"已为设备 {device_id} 排队 query_device_status 命令")
+        logger.info(f"查询设备 {device_id} 状态: {delivery_desc}")
         
         return ResponseModel(
             code=0,
-            message="查询命令已下发，等待设备响应",
+            message=message,
             data={
                 "query_packet": query_data,
                 "full_packet": full_packet,
-                "delivery_method": "设备将在下次心跳或主动轮询时获取此命令"
+                "delivery_method": delivery_method,
+                "delivery_desc": delivery_desc,
+                "device_online": delivery_method in ("websocket", "long_polling")
             }
         )
     
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"生成查询报文异常: {e}", exc_info=True)
+        logger.error(f"查询设备状态异常: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={"code": 10000, "message": f"服务器内部错误: {str(e)}"}
@@ -325,13 +513,14 @@ async def get_pending_commands(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    设备轮询待执行命令（硬件直接调用）
+    设备轮询待执行命令（硬件直接调用 —— 向下兼容）
     
-    设备可定期调用此接口检查是否有后台下发的命令。
+    注意：推荐使用 GET /device/listen/{device_id} 长轮询接口替代本接口。
+    长轮询接口支持实时命令推送，无需定期轮询。
+    
+    本接口仅作为回退方案，用于不支持长轮询的设备。
     如果有待执行命令（如 query_device_status），将返回命令报文。
     命令获取后会自动清除，不会重复下发。
-    
-    设备收到 query_device_status 命令后，应立即上报 device_status_report。
     """
     try:
         device_service = DeviceService(db)

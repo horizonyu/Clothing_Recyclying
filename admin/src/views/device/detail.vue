@@ -23,9 +23,14 @@
             <template #header>
               <div class="section-header">
                 <span>📡 设备基本信息</span>
-                <el-tag :type="getStatusType(device.status)" effect="dark" size="large">
-                  {{ getStatusText(device.status) }}
-                </el-tag>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <el-tag :type="getConnTypeColor(device.connection_type)" effect="plain" size="small">
+                    {{ getConnTypeText(device.connection_type) }}
+                  </el-tag>
+                  <el-tag :type="getStatusType(device.status)" effect="dark" size="large">
+                    {{ getStatusText(device.status) }}
+                  </el-tag>
+                </div>
               </div>
             </template>
             <el-descriptions :column="3" border>
@@ -366,6 +371,16 @@ const getStatusText = (status) => {
   return m[status] || status
 }
 
+const getConnTypeColor = (type) => {
+  const m = { 'websocket': 'success', 'long_polling': '', 'offline': 'info' }
+  return m[type] || 'info'
+}
+
+const getConnTypeText = (type) => {
+  const m = { 'websocket': '🔗 WebSocket 长连接', 'long_polling': '⏳ 长轮询', 'offline': '⚫ 无实时连接' }
+  return m[type] || '⚫ 无实时连接'
+}
+
 const getBatteryColor = (level) => {
   if (level == null) return '#909399'
   if (level <= 10) return '#F56C6C'
@@ -433,20 +448,33 @@ const initChart = (dailyOrders) => {
 
 /**
  * 主动查询设备状态
- * 向后台发送 query_device_status 命令，设备在下次心跳或轮询时执行并上报最新状态
+ * 命令下发优先级: WebSocket > 长轮询 > 数据库排队
  */
 const handleQueryStatus = async () => {
   queryLoading.value = true
   try {
-    await queryDeviceStatus(route.params.id)
-    ElMessage.success({
-      message: '查询指令已下发，设备将在下次心跳时上报最新状态',
-      duration: 4000,
-    })
-    // 5秒后自动刷新一次，看看设备是否已响应
-    setTimeout(() => {
-      loadData()
-    }, 5000)
+    const { data } = await queryDeviceStatus(route.params.id)
+    const method = data?.delivery_method
+    
+    if (method === 'websocket') {
+      ElMessage.success({
+        message: '查询命令已通过 WebSocket 实时下发到设备，正在等待响应...',
+        duration: 3000,
+      })
+      setTimeout(() => { loadData() }, 3000)
+    } else if (method === 'long_polling') {
+      ElMessage.success({
+        message: '查询命令已通过长轮询实时下发到设备，正在等待响应...',
+        duration: 3000,
+      })
+      setTimeout(() => { loadData() }, 3000)
+    } else {
+      ElMessage.warning({
+        message: '设备当前不在线，命令已排队，设备上线后将自动响应',
+        duration: 5000,
+      })
+      setTimeout(() => { loadData() }, 10000)
+    }
   } catch (error) {
     ElMessage.error('下发查询指令失败')
   } finally {

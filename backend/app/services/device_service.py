@@ -1,11 +1,22 @@
 """
 设备服务层 - 按照《4G设备-后台通信协议》实现
+
+通信方式（优先级从高到低）:
+  1. WebSocket 长连接 (推荐) — ws://server/api/v1/device/ws/{device_id}
+     设备通过 WebSocket 与后台建立持久双向连接，心跳/状态上报/命令接收
+     全部走同一条连接，真正意义上的长连接。
+  2. HTTP 长轮询 (兼容) — GET /device/listen/{device_id}
+     设备周期性发起长轮询请求，等待后台命令推送。
+  3. HTTP 短连接 + 数据库排队 (兜底)
+     设备通过 POST 上报心跳/状态，后台将待执行命令写入 pending_command
+     字段，设备在下次心跳响应中获取。
 """
+import asyncio
 import hashlib
 import json
 import uuid
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from loguru import logger
@@ -26,6 +37,120 @@ from app.schemas.device import (
 PACKET_HEADER = "0x6868"
 PACKET_FOOTER = "0x1616"
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+# ============================================================
+# 统一设备连接管理器 (WebSocket + 长轮询)
+# ============================================================
+
+class DeviceConnectionManager:
+    """
+    统一管理设备的实时连接通道。
+
+    支持两种通道:
+      1. WebSocket（推荐）— 真正的双向长连接，心跳和命令都走同一通道
+      2. 长轮询（兼容）— HTTP 长轮询，设备周期性请求 GET /device/listen
+
+    命令下发优先级: WebSocket > 长轮询 Queue > 数据库 pending_command
+    """
+
+    def __init__(self):
+        self._ws_connections: Dict[str, Any] = {}        # device_id → WebSocket
+        self._lp_channels: Dict[str, asyncio.Queue] = {} # device_id → asyncio.Queue
+
+    # ---- WebSocket 管理 ----
+
+    async def ws_connect(self, device_id: str, websocket: Any) -> None:
+        """注册 WebSocket 连接（如有旧连接会先关闭）"""
+        if device_id in self._ws_connections:
+            try:
+                await self._ws_connections[device_id].close(code=1000, reason="新连接替换")
+            except Exception:
+                pass
+        self._ws_connections[device_id] = websocket
+        logger.info(f"[WS] 设备 {device_id} 已连接 (在线: {len(self._ws_connections)})")
+
+    def ws_disconnect(self, device_id: str) -> None:
+        """注销 WebSocket 连接"""
+        self._ws_connections.pop(device_id, None)
+        logger.info(f"[WS] 设备 {device_id} 已断开 (在线: {len(self._ws_connections)})")
+
+    def is_ws_connected(self, device_id: str) -> bool:
+        """检查设备是否有 WebSocket 连接"""
+        return device_id in self._ws_connections
+
+    async def ws_send(self, device_id: str, message: dict) -> bool:
+        """通过 WebSocket 发送消息给设备"""
+        ws = self._ws_connections.get(device_id)
+        if ws:
+            try:
+                await ws.send_json(message)
+                return True
+            except Exception:
+                self.ws_disconnect(device_id)
+        return False
+
+    # ---- 长轮询管理 (向下兼容) ----
+
+    def get_lp_channel(self, device_id: str) -> asyncio.Queue:
+        """获取（或创建）设备的长轮询命令通道"""
+        if device_id not in self._lp_channels:
+            self._lp_channels[device_id] = asyncio.Queue()
+        return self._lp_channels[device_id]
+
+    def is_lp_listening(self, device_id: str) -> bool:
+        """检查是否有活跃的长轮询监听"""
+        if device_id not in self._lp_channels:
+            return False
+        q = self._lp_channels[device_id]
+        return hasattr(q, '_getters') and len(q._getters) > 0
+
+    def remove_lp_channel(self, device_id: str) -> None:
+        """移除长轮询通道"""
+        self._lp_channels.pop(device_id, None)
+
+    # ---- 统一命令发送 ----
+
+    async def send_to_device(self, device_id: str, command: dict) -> Tuple[bool, str]:
+        """
+        向设备发送命令（优先 WebSocket > 长轮询）。
+
+        Returns:
+            (delivered, method) — method: "websocket" / "long_polling" / ""(均失败)
+        """
+        # 1. 优先 WebSocket
+        if self.is_ws_connected(device_id):
+            if await self.ws_send(device_id, command):
+                return True, "websocket"
+        # 2. 其次长轮询
+        if self.is_lp_listening(device_id):
+            await self.get_lp_channel(device_id).put(command)
+            return True, "long_polling"
+        return False, ""
+
+    # ---- 状态查询 ----
+
+    def get_connection_type(self, device_id: str) -> str:
+        """获取设备当前连接类型: websocket / long_polling / offline"""
+        if self.is_ws_connected(device_id):
+            return "websocket"
+        if self.is_lp_listening(device_id):
+            return "long_polling"
+        return "offline"
+
+    def get_online_summary(self) -> dict:
+        """获取所有设备在线状态统计"""
+        lp_count = sum(1 for d in self._lp_channels if self.is_lp_listening(d))
+        return {
+            "websocket": len(self._ws_connections),
+            "long_polling": lp_count,
+            "total_online": len(self._ws_connections) + lp_count,
+            "ws_device_ids": list(self._ws_connections.keys()),
+        }
+
+
+# 全局连接管理器（单例）
+connection_manager = DeviceConnectionManager()
 
 
 def get_current_timestamp_str() -> str:
@@ -407,29 +532,44 @@ class DeviceService:
             time_sync = build_time_sync(device_id)
             return False, str(e), ack, time_sync, None
     
-    async def queue_command(self, device_id: str, command: str) -> bool:
+    async def send_command(self, device_id: str, command: str) -> Tuple[bool, str]:
         """
-        为设备排队一个待执行命令
-        
-        设备将在下次心跳上报或主动轮询时获取该命令。
+        向设备发送命令 —— 优先实时推送，离线时回退排队。
+
+        下发优先级：
+        1. WebSocket 长连接 → 直接推送，设备立即收到
+        2. 长轮询 (asyncio.Queue) → 推入队列，设备长轮询立即返回
+        3. 数据库排队 (pending_command) → 设备下次心跳/轮询时获取
         
         Args:
             device_id: 设备ID
             command: 命令类型，如 "query_device_status"
         
         Returns:
-            是否成功排队
+            (success, delivery_method) - "websocket" / "long_polling" / "queued" / "device_not_found"
         """
         device = await self.get_device(device_id)
         if not device:
-            return False
-        
+            return False, "device_not_found"
+
+        # 构建命令报文
+        if command == "query_device_status":
+            cmd_packet = build_query_device_status(device_id)
+        else:
+            cmd_packet = {"msg_type": command, "device_id": device_id}
+
+        # 尝试实时推送（WebSocket > 长轮询）
+        delivered, method = await connection_manager.send_to_device(device_id, cmd_packet)
+        if delivered:
+            logger.info(f"命令 {command} 已通过 {method} 推送到设备 {device_id}")
+            return True, method
+
+        # 回退：保存到数据库排队
         device.pending_command = command
         device.pending_command_at = datetime.now()
         await self.db.commit()
-        
-        logger.info(f"为设备 {device_id} 排队命令: {command}")
-        return True
+        logger.info(f"设备 {device_id} 不在线，命令 {command} 已排队等待")
+        return True, "queued"
     
     async def get_and_clear_pending_command(self, device_id: str) -> Optional[dict]:
         """

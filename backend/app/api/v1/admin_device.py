@@ -13,6 +13,7 @@ from app.models.device_camera import DeviceCameraImage
 from app.models.admin import Admin
 from app.schemas.common import ResponseModel, PaginatedResponse
 from app.api.v1.admin import get_current_admin
+from app.services.device_service import connection_manager
 
 router = APIRouter()
 
@@ -86,6 +87,8 @@ async def get_device_list(
                 "capacity_percent": device.capacity_percent or 0,
                 "firmware_version": device.firmware_version,
                 "last_heartbeat": device.last_heartbeat.strftime("%Y-%m-%d %H:%M:%S") if device.last_heartbeat else None,
+                # 实时连接类型：websocket / long_polling / offline
+                "connection_type": connection_manager.get_connection_type(device.device_id),
                 # 统计数据
                 "total_orders": total_orders,
                 "total_weight": round(total_weight, 2),
@@ -217,6 +220,9 @@ async def get_device_detail(
             "unit_price": device.unit_price,
             "min_weight": device.min_weight,
             
+            # 实时连接类型：websocket / long_polling / offline
+            "connection_type": connection_manager.get_connection_type(device.device_id),
+            
             # 协议上报数据
             "battery_level": device.battery_level,
             "smoke_sensor_status": device.smoke_sensor_status or 0,
@@ -314,6 +320,9 @@ async def get_device_stats(
         )
         low_battery = low_battery_result.scalar() or 0
         
+        # 实时连接统计
+        conn_summary = connection_manager.get_online_summary()
+        
         return ResponseModel(data={
             "total": total,
             "online": online,
@@ -323,6 +332,8 @@ async def get_device_stats(
             "using_count": using_count,
             "low_battery": low_battery,
             "online_rate": round(online / total * 100, 1) if total > 0 else 0,
+            # 实时连接统计
+            "realtime_connections": conn_summary,
         })
     except Exception as e:
         logger.error(f"获取设备统计失败: {e}", exc_info=True)
@@ -336,11 +347,17 @@ async def admin_query_device_status(
     current_admin: Admin = Depends(get_current_admin)
 ):
     """
-    后台主动查询设备状态
+    后台主动查询设备状态（实时下发）
     
     向指定设备下发 query_device_status 命令。
-    设备在下次心跳上报或主动轮询时会收到此命令，
-    收到后立即上报全量状态 (device_status_report)，后台自动更新。
+    
+    下发优先级：
+    1. WebSocket 长连接 → 直接推送，设备立即收到
+    2. HTTP 长轮询 → 推入 Queue，设备长轮询立即返回
+    3. 数据库排队 → 写入 pending_command，设备下次心跳时获取
+    
+    设备收到命令后，会立即采集全量状态并上报 device_status_report，
+    后台自动更新设备信息。
     """
     try:
         from app.services.device_service import DeviceService
@@ -351,23 +368,33 @@ async def admin_query_device_status(
         if not device:
             raise HTTPException(status_code=404, detail="设备不存在")
         
-        # 将 query_device_status 命令排队到设备
-        success = await device_service.queue_command(device_id, "query_device_status")
+        # 优先实时推送，离线回退排队
+        success, delivery_method = await device_service.send_command(device_id, "query_device_status")
         
         if success:
-            logger.info(f"管理员 {current_admin.username} 主动查询设备 {device_id} 状态")
+            method_info = {
+                "websocket": ("查询命令已通过 WebSocket 实时下发到设备", "WebSocket 实时推送"),
+                "long_polling": ("查询命令已通过长轮询实时下发到设备", "长轮询实时推送"),
+                "queued": ("设备当前不在线，命令已排队，设备上线后将自动获取", "排队等待（设备离线）"),
+            }
+            message, delivery_desc = method_info.get(
+                delivery_method, ("命令已发送", delivery_method)
+            )
+            
+            logger.info(f"管理员 {current_admin.username} 主动查询设备 {device_id} 状态 [{delivery_desc}]")
             return ResponseModel(
                 code=0,
-                message="查询指令已下发，等待设备响应",
+                message=message,
                 data={
                     "device_id": device_id,
                     "command": "query_device_status",
-                    "delivery_method": "设备将在下次心跳或轮询时获取此命令",
-                    "pending_command": device.pending_command,
+                    "delivery_method": delivery_method,
+                    "delivery_desc": delivery_desc,
+                    "device_online": delivery_method in ("websocket", "long_polling"),
                 }
             )
         else:
-            raise HTTPException(status_code=500, detail="命令排队失败")
+            raise HTTPException(status_code=500, detail="命令发送失败")
     except HTTPException:
         raise
     except Exception as e:
