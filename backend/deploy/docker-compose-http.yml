@@ -18,6 +18,9 @@ services:
       - TZ=Asia/Shanghai
     env_file:
       - ../.env
+    volumes:
+      # 挂载代码目录，实现代码实时更新（开发环境推荐）
+      - ../app:/app/app:ro
     depends_on:
       mysql:
         condition: service_healthy
