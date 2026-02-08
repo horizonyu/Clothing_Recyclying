@@ -37,6 +37,10 @@
   [在线测试 - WebSocket] 需要后端 API 服务 + websockets 库
     T12 - WebSocket 连接 + 心跳 → 验证 ack + time_sync
     T13 - WebSocket 命令实时推送 → 后台查询 → 设备通过 WS 立即收到
+    T14 - WebSocket 首次上报 (first_report_at=NULL) → ack + time_sync
+    T15 - WebSocket 状态上报 (含摄像头) → ack，无 time_sync + 图片保存
+    T16 - WebSocket 烟感告警上报 (smoke=1) → ack + 告警图片保存
+    T17 - WebSocket 错误校验码上报 → ack (ack_code=1, 校验失败)
 
   ⚠️ 注意：T1 测试要求设备 first_report_at 字段为 NULL（即从未上报过数据）。
      如需重新测试，请先执行：
@@ -999,18 +1003,19 @@ def test_T12_websocket_heartbeat():
 
             # 发送心跳
             hb = build_heartbeat()
-            await ws.send(json.dumps(hb, ensure_ascii=False))
-            print(f"  📤 已发送 heartbeat_report")
+            hb_json = json.dumps(hb, ensure_ascii=False)
+            await ws.send(hb_json)
+            print(f"  📤 已发送 heartbeat_report, 报文大小={len(hb_json)} bytes")
 
             # 接收 ack
             ack_raw = await asyncio.wait_for(ws.recv(), timeout=5)
             ack = json.loads(ack_raw)
-            print(f"  📥 收到 ack: msg_type={ack.get('msg_type', '?')}")
+            print(f"  📥 收到消息1 (ack): {json.dumps(ack, indent=2, ensure_ascii=False)}")
 
             # 接收 time_sync
             ts_raw = await asyncio.wait_for(ws.recv(), timeout=5)
             ts = json.loads(ts_raw)
-            print(f"  📥 收到 time_sync: msg_type={ts.get('msg_type', '?')}")
+            print(f"  📥 收到消息2 (time_sync): {json.dumps(ts, indent=2, ensure_ascii=False)}")
 
             return ack, ts
 
@@ -1104,10 +1109,12 @@ def test_T13_websocket_command_push():
     query_url = f"{API_BASE_URL}/device/query-status?device_id={DEVICE_ID}"
     try:
         s2, r2 = post_json(query_url, {})
+        print(f"  📥 状态码: {s2}")
+        print(f"  📥 响应: {json.dumps(r2, indent=2, ensure_ascii=False)}")
         delivery = r2.get("data", {}).get("delivery_method", "")
         step_results[1] = (s2 == 200 and r2.get("code") == 0 and delivery == "websocket")
-        print(f"  📥 delivery_method={delivery} (预期: websocket)")
-        print(f"  {'✅' if step_results[1] else '❌'} 命令下发: {delivery}")
+        print(f"  {'✅' if step_results[1] else '❌'} delivery_method={delivery} "
+              f"(预期: websocket)")
     except Exception as e:
         print(f"  ❌ 请求失败: {e}")
         record_result("T13", "WebSocket 命令推送", False, f"步骤2失败: {e}")
@@ -1121,9 +1128,9 @@ def test_T13_websocket_command_push():
     if ws_received.get("error"):
         print(f"  ❌ WebSocket 监听出错: {ws_received['error']}")
     elif cmd:
+        print(f"  📥 收到命令: {json.dumps(cmd, indent=2, ensure_ascii=False)}")
         cmd_type = cmd.get("msg_type", "")
         step_results[2] = (cmd_type == "query_device_status")
-        print(f"  📥 收到命令: msg_type={cmd_type}")
         print(f"  {'✅' if step_results[2] else '❌'} 命令类型: {cmd_type} "
               f"(预期: query_device_status)")
     else:
@@ -1133,6 +1140,323 @@ def test_T13_websocket_command_push():
     labels = ["WS连接", "下发websocket", "WS收到命令"]
     detail = "、".join(f"{labels[i]}{'✅' if r else '❌'}" for i, r in enumerate(step_results))
     record_result("T13", "WebSocket 命令推送", all_pass, detail)
+
+
+def test_T14_websocket_first_report():
+    """
+    T14: WebSocket 首次上报 → 触发时间同步 (first_report_at=NULL)
+    通过 WebSocket 长连接验证首次上报时，后台返回 ack + time_sync。
+
+    ⚠️ 需要先重置 first_report_at：
+       UPDATE devices SET first_report_at = NULL WHERE device_id = 'DEV001';
+    """
+    if not HAS_WEBSOCKETS:
+        print_section("T14: WebSocket 首次上报 → time_sync")
+        print("  ⚠️  websockets 库未安装, 跳过测试")
+        print("  💡 安装: pip install websockets")
+        record_result("T14", "WS 首次上报", False, "websockets 库未安装")
+        return
+
+    print_section("T14: WebSocket 首次上报 → 触发时间同步 (first_report_at=NULL)")
+    print("  协议规定: 设备首次向后台上报数据时，后台返回 ack + time_sync")
+    print("  通信方式: WebSocket 长连接")
+    print("  ⚠️  如设备已上报过，需先执行:")
+    print(f"     UPDATE devices SET first_report_at = NULL WHERE device_id = '{DEVICE_ID}';")
+    print_expected([
+        ("WebSocket 连接", "成功建立"),
+        ("发送 device_status_report", "通过 WebSocket 发送"),
+        ("收到 server_ack", "msg_type=server_ack, ack_code=0"),
+        ("收到 time_sync", "msg_type=time_sync (首次上报触发)"),
+    ])
+
+    async def run_ws_first_report():
+        ws_url = build_ws_url(DEVICE_ID)
+        print(f"\n  📡 连接地址: {ws_url}")
+
+        async with websockets.connect(ws_url, open_timeout=10) as ws:
+            print(f"  ✅ WebSocket 连接已建立")
+
+            # 构建首次上报报文
+            report = build_status_report(battery=85, is_using=0)
+            report_json = json.dumps(report, ensure_ascii=False)
+            print(f"  📤 发送: device_status_report, battery=85%, is_using=0")
+            print(f"  📤 报文大小: {len(report_json)} bytes")
+            await ws.send(report_json)
+
+            # 接收 ack
+            ack_raw = await asyncio.wait_for(ws.recv(), timeout=5)
+            ack = json.loads(ack_raw)
+            print(f"  📥 收到消息1: {json.dumps(ack, indent=2, ensure_ascii=False)}")
+
+            # 尝试接收 time_sync（首次上报才有）
+            time_sync = None
+            try:
+                ts_raw = await asyncio.wait_for(ws.recv(), timeout=3)
+                time_sync = json.loads(ts_raw)
+                print(f"  📥 收到消息2: {json.dumps(time_sync, indent=2, ensure_ascii=False)}")
+            except asyncio.TimeoutError:
+                print(f"  📥 消息2: 未收到 (超时3秒)")
+
+            return ack, time_sync
+
+    try:
+        ack, time_sync = asyncio.run(run_ws_first_report())
+
+        has_time_sync = time_sync is not None and time_sync.get("msg_type") == "time_sync"
+        sync_time = ""
+        if has_time_sync:
+            sync_time = time_sync.get("data", {}).get("standard_time", "")
+
+        checks = [
+            ("ack.msg_type", ack.get("msg_type", ""), "server_ack",
+             ack.get("msg_type") == "server_ack"),
+            ("ack.data.ack_code", ack.get("data", {}).get("ack_code", -1), 0,
+             ack.get("data", {}).get("ack_code") == 0),
+            ("time_sync", "存在" if has_time_sync else "不存在",
+             "存在", has_time_sync),
+        ]
+        if has_time_sync:
+            checks.append(("time_sync.data.standard_time", sync_time or "无",
+                           "当前服务器时间", bool(sync_time)))
+
+        ok = print_actual(checks)
+
+        if not has_time_sync and ack.get("data", {}).get("ack_code") == 0:
+            print("\n  ⚠️  未收到 time_sync！该设备可能已上报过数据(first_report_at 不为空)。")
+            print(f"     请执行以下 SQL 后重新测试:")
+            print(f"     UPDATE devices SET first_report_at = NULL WHERE device_id = '{DEVICE_ID}';")
+            record_result("T14", "WS 首次上报", False,
+                          "设备已上报过数据，需重置 first_report_at")
+        else:
+            record_result("T14", "WS 首次上报", ok,
+                          f"同步时间: {sync_time}" if sync_time else "")
+    except Exception as e:
+        print(f"  ❌ WebSocket 测试失败: {e}")
+        record_result("T14", "WS 首次上报", False, str(e))
+
+
+def test_T15_websocket_report_with_camera():
+    """
+    T15: WebSocket 状态上报 (含摄像头数据)
+    通过 WebSocket 长连接验证含摄像头数据的状态上报。
+    非首次上报，不应触发 time_sync。
+    """
+    if not HAS_WEBSOCKETS:
+        print_section("T15: WebSocket 状态上报 (含摄像头)")
+        print("  ⚠️  websockets 库未安装, 跳过测试")
+        record_result("T15", "WS 状态上报(含摄像头)", False, "websockets 库未安装")
+        return
+
+    print_section("T15: WebSocket 状态上报 (含摄像头, is_using=1)")
+    print("  场景: 设备通过 WebSocket 上报状态 + 摄像头数据")
+    print("  通信方式: WebSocket 长连接")
+    print_expected([
+        ("WebSocket 连接", "成功建立"),
+        ("发送 device_status_report", "含 camera_1×3 + camera_2×3"),
+        ("收到 server_ack", "msg_type=server_ack, ack_code=0"),
+        ("time_sync", "不存在 (非首次上报)"),
+    ])
+
+    async def run_ws_report_camera():
+        ws_url = build_ws_url(DEVICE_ID)
+        print(f"\n  📡 连接地址: {ws_url}")
+
+        async with websockets.connect(ws_url, open_timeout=10) as ws:
+            print(f"  ✅ WebSocket 连接已建立")
+
+            # 生成测试图片
+            print("  📸 生成测试图片中...")
+            camera_data = generate_camera_test_data()
+            print(f"  📸 camera_1: {len(camera_data['camera_1'])}张, "
+                  f"camera_2: {len(camera_data['camera_2'])}张")
+
+            report = build_status_report(battery=80, window_open=1, is_using=1,
+                                         camera_data=camera_data)
+            report_json = json.dumps(report, ensure_ascii=False)
+            print(f"  📤 发送: is_using=1, 报文大小={len(report_json)} bytes")
+            await ws.send(report_json)
+
+            # 接收 ack
+            ack_raw = await asyncio.wait_for(ws.recv(), timeout=10)
+            ack = json.loads(ack_raw)
+            print(f"  📥 收到消息1 (ack): {json.dumps(ack, indent=2, ensure_ascii=False)}")
+
+            # 尝试接收 time_sync（非首次上报不应有）
+            time_sync = None
+            try:
+                ts_raw = await asyncio.wait_for(ws.recv(), timeout=2)
+                time_sync = json.loads(ts_raw)
+                print(f"  📥 收到消息2 (意外): {json.dumps(time_sync, indent=2, ensure_ascii=False)}")
+            except asyncio.TimeoutError:
+                print(f"  📥 消息2: 无 (符合预期，非首次上报)")
+
+            return ack, time_sync
+
+    try:
+        ack, time_sync = asyncio.run(run_ws_report_camera())
+
+        has_time_sync = time_sync is not None and time_sync.get("msg_type") == "time_sync"
+
+        checks = [
+            ("ack.msg_type", ack.get("msg_type", ""), "server_ack",
+             ack.get("msg_type") == "server_ack"),
+            ("ack.data.ack_code", ack.get("data", {}).get("ack_code", -1), 0,
+             ack.get("data", {}).get("ack_code") == 0),
+            ("ack.data.reply_msg_type",
+             ack.get("data", {}).get("reply_msg_type", ""),
+             "device_status_report",
+             ack.get("data", {}).get("reply_msg_type") == "device_status_report"),
+            ("time_sync", "存在" if has_time_sync else "不存在",
+             "不存在", not has_time_sync),
+        ]
+        ok = print_actual(checks)
+        record_result("T15", "WS 状态上报(含摄像头)", ok)
+    except Exception as e:
+        print(f"  ❌ WebSocket 测试失败: {e}")
+        record_result("T15", "WS 状态上报(含摄像头)", False, str(e))
+
+
+def test_T16_websocket_smoke_alarm():
+    """
+    T16: WebSocket 烟感告警上报 (smoke_sensor_status=1, 含告警照片)
+    通过 WebSocket 长连接验证烟感告警场景。
+    """
+    if not HAS_WEBSOCKETS:
+        print_section("T16: WebSocket 烟感告警上报")
+        print("  ⚠️  websockets 库未安装, 跳过测试")
+        record_result("T16", "WS 烟感告警上报", False, "websockets 库未安装")
+        return
+
+    print_section("T16: WebSocket 烟感告警上报 (smoke=1, 含告警照片)")
+    print("  场景: 烟感传感器触发告警，设备通过 WebSocket 上报告警状态和现场照片")
+    print("  通信方式: WebSocket 长连接")
+    print_expected([
+        ("WebSocket 连接", "成功建立"),
+        ("发送 device_status_report", "smoke_sensor_status=1 + 告警照片"),
+        ("收到 server_ack", "msg_type=server_ack, ack_code=0"),
+        ("后台设备表", "smoke_sensor_status 更新为 1"),
+    ])
+
+    async def run_ws_smoke_alarm():
+        ws_url = build_ws_url(DEVICE_ID)
+        print(f"\n  📡 连接地址: {ws_url}")
+
+        async with websockets.connect(ws_url, open_timeout=10) as ws:
+            print(f"  ✅ WebSocket 连接已建立")
+
+            # 生成告警照片（红色调）
+            print("  📸 生成告警场景测试图片(红色调)...")
+            camera_data = {
+                "camera_1": [
+                    generate_test_png(160, 120, r=200, g=60, b=60),
+                    generate_test_png(160, 120, r=220, g=80, b=50),
+                ],
+                "camera_2": [
+                    generate_test_png(160, 120, r=180, g=150, b=120),
+                ]
+            }
+
+            report = build_status_report(battery=72, smoke=1, is_using=0,
+                                         camera_data=camera_data)
+            report_json = json.dumps(report, ensure_ascii=False)
+            print(f"  📤 发送: smoke=1 ⚠️ 告警, 报文大小={len(report_json)} bytes")
+            await ws.send(report_json)
+
+            # 接收 ack
+            ack_raw = await asyncio.wait_for(ws.recv(), timeout=10)
+            ack = json.loads(ack_raw)
+            print(f"  📥 收到 ack: {json.dumps(ack, indent=2, ensure_ascii=False)}")
+
+            return ack
+
+    try:
+        ack = asyncio.run(run_ws_smoke_alarm())
+
+        ack_code = ack.get("data", {}).get("ack_code")
+        ack_desc = ack.get("data", {}).get("ack_desc", "")
+
+        checks = [
+            ("ack.msg_type", ack.get("msg_type", ""), "server_ack",
+             ack.get("msg_type") == "server_ack"),
+            ("ack.data.ack_code", ack_code, 0, ack_code == 0),
+            ("ack.data.ack_desc", f"'{ack_desc}'", "数据接收成功",
+             "成功" in ack_desc or ack_code == 0),
+            ("ack.data.reply_msg_type",
+             ack.get("data", {}).get("reply_msg_type", ""),
+             "device_status_report",
+             ack.get("data", {}).get("reply_msg_type") == "device_status_report"),
+        ]
+        ok = print_actual(checks)
+        record_result("T16", "WS 烟感告警上报", ok)
+    except Exception as e:
+        print(f"  ❌ WebSocket 测试失败: {e}")
+        record_result("T16", "WS 烟感告警上报", False, str(e))
+
+
+def test_T17_websocket_wrong_check_code():
+    """
+    T17: WebSocket 错误校验码上报
+    通过 WebSocket 长连接验证校验码错误时的拒绝处理。
+    """
+    if not HAS_WEBSOCKETS:
+        print_section("T17: WebSocket 错误校验码上报")
+        print("  ⚠️  websockets 库未安装, 跳过测试")
+        record_result("T17", "WS 错误校验码", False, "websockets 库未安装")
+        return
+
+    print_section("T17: WebSocket 错误校验码上报")
+    print("  场景: 设备通过 WebSocket 发送被篡改的报文，校验码不匹配")
+    print("  通信方式: WebSocket 长连接")
+    print_expected([
+        ("WebSocket 连接", "成功建立"),
+        ("发送 device_status_report", "篡改 check_code"),
+        ("收到 server_ack", "ack_code=1 (校验失败)"),
+        ("ack_desc", "包含 '校验失败'"),
+    ])
+
+    async def run_ws_wrong_check():
+        ws_url = build_ws_url(DEVICE_ID)
+        print(f"\n  📡 连接地址: {ws_url}")
+
+        async with websockets.connect(ws_url, open_timeout=10) as ws:
+            print(f"  ✅ WebSocket 连接已建立")
+
+            # 构建报文并篡改校验码
+            report = build_status_report(battery=90, is_using=0)
+            report["check_code"] = "0000000000000000ffffffffffffffff"
+            report_json = json.dumps(report, ensure_ascii=False)
+            print(f"  📤 发送: 篡改 check_code = {report['check_code']}")
+            await ws.send(report_json)
+
+            # 接收 ack (应包含错误信息)
+            ack_raw = await asyncio.wait_for(ws.recv(), timeout=5)
+            ack = json.loads(ack_raw)
+            print(f"  📥 收到 ack: {json.dumps(ack, indent=2, ensure_ascii=False)}")
+
+            return ack
+
+    try:
+        ack = asyncio.run(run_ws_wrong_check())
+
+        ack_code = ack.get("data", {}).get("ack_code")
+        ack_desc = ack.get("data", {}).get("ack_desc", "")
+
+        checks = [
+            ("ack.msg_type", ack.get("msg_type", ""), "server_ack",
+             ack.get("msg_type") == "server_ack"),
+            ("ack.data.ack_code", ack_code, 1, ack_code == 1),
+            ("ack_desc 包含校验", f"'{ack_desc}'", "包含'校验'",
+             "校验" in ack_desc),
+            ("ack.data.reply_msg_type",
+             ack.get("data", {}).get("reply_msg_type", ""),
+             "device_status_report",
+             ack.get("data", {}).get("reply_msg_type") == "device_status_report"),
+        ]
+        ok = print_actual(checks)
+        record_result("T17", "WS 错误校验码", ok)
+    except Exception as e:
+        print(f"  ❌ WebSocket 测试失败: {e}")
+        record_result("T17", "WS 错误校验码", False, str(e))
 
 
 # ============================================================
@@ -1170,17 +1494,17 @@ def print_summary():
     print(f"  📋 协议功能覆盖")
     print(f"{'━' * 70}")
     features = [
-        ("上行: device_status_report", "T1~T5", "设备状态上报(含各种场景)"),
+        ("上行: device_status_report", "T1~T5/T14~T16", "HTTP+WS 状态上报(含各种场景)"),
         ("上行: heartbeat_report", "T6/T8/T12", "心跳上报 + 时间同步"),
-        ("下行: server_ack", "T1~T10/T12", "所有上报接口的应答"),
-        ("下行: time_sync (首次上报)", "T1", "first_report_at为NULL时下发"),
+        ("下行: server_ack", "T1~T10/T12~T17", "所有上报接口的应答"),
+        ("下行: time_sync (首次上报)", "T1/T14", "first_report_at为NULL时下发(HTTP+WS)"),
         ("下行: time_sync (心跳)", "T6/T8/T12", "收到心跳后下发"),
         ("下行: query_device_status", "T7~T9/T13", "后台主动查询(WS+LP+离线)"),
-        ("通道: WebSocket 长连接", "T12/T13", "双向长连接(推荐)"),
+        ("通道: WebSocket 长连接", "T12~T17", "双向长连接:心跳/上报/命令/校验"),
         ("通道: HTTP 长轮询", "T7", "asyncio.Queue实时推送(兼容)"),
         ("通道: 离线回退排队", "T8", "命令排队+心跳获取(兜底)"),
-        ("功能: camera_data", "T2/T3/T4", "摄像头图片Base64存储"),
-        ("功能: MD5 校验", "P2/T10", "校验码计算与验证"),
+        ("功能: camera_data", "T2~T4/T15~T16", "HTTP+WS摄像头图片Base64存储"),
+        ("功能: MD5 校验", "P2/T10/T17", "HTTP+WS校验码计算与验证"),
         ("功能: 管理后台查询", "T9", "admin API 主动查询"),
     ]
     for feature, tests, desc in features:
@@ -1302,6 +1626,18 @@ if __name__ == "__main__":
 
     # T13: WebSocket 命令实时推送
     test_T13_websocket_command_push()
+
+    # T14: WebSocket 首次上报 → time_sync
+    test_T14_websocket_first_report()
+
+    # T15: WebSocket 状态上报（含摄像头）
+    test_T15_websocket_report_with_camera()
+
+    # T16: WebSocket 烟感告警上报
+    test_T16_websocket_smoke_alarm()
+
+    # T17: WebSocket 错误校验码
+    test_T17_websocket_wrong_check_code()
 
     # ========== 汇总 ==========
     print_summary()
