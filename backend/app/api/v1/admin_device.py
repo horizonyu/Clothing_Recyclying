@@ -329,6 +329,52 @@ async def get_device_stats(
         raise HTTPException(status_code=500, detail=f"获取设备统计失败: {str(e)}")
 
 
+@router.post("/device/query-status", response_model=ResponseModel)
+async def admin_query_device_status(
+    device_id: str = Query(..., description="设备ID"),
+    db: AsyncSession = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    后台主动查询设备状态
+    
+    向指定设备下发 query_device_status 命令。
+    设备在下次心跳上报或主动轮询时会收到此命令，
+    收到后立即上报全量状态 (device_status_report)，后台自动更新。
+    """
+    try:
+        from app.services.device_service import DeviceService
+        
+        device_service = DeviceService(db)
+        device = await device_service.get_device(device_id)
+        
+        if not device:
+            raise HTTPException(status_code=404, detail="设备不存在")
+        
+        # 将 query_device_status 命令排队到设备
+        success = await device_service.queue_command(device_id, "query_device_status")
+        
+        if success:
+            logger.info(f"管理员 {current_admin.username} 主动查询设备 {device_id} 状态")
+            return ResponseModel(
+                code=0,
+                message="查询指令已下发，等待设备响应",
+                data={
+                    "device_id": device_id,
+                    "command": "query_device_status",
+                    "delivery_method": "设备将在下次心跳或轮询时获取此命令",
+                    "pending_command": device.pending_command,
+                }
+            )
+        else:
+            raise HTTPException(status_code=500, detail="命令排队失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"主动查询设备状态失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"主动查询设备状态失败: {str(e)}")
+
+
 @router.get("/device/{device_id}/camera-images", response_model=ResponseModel)
 async def get_device_camera_images(
     device_id: str,

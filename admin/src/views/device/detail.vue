@@ -5,9 +5,14 @@
       <el-button @click="$router.back()">
         <el-icon><ArrowLeft /></el-icon> 返回设备列表
       </el-button>
-      <el-button type="primary" @click="loadData">
-        <el-icon><Refresh /></el-icon> 刷新数据
-      </el-button>
+      <div style="display: flex; gap: 8px;">
+        <el-button type="warning" @click="handleQueryStatus" :loading="queryLoading">
+          <el-icon><Search /></el-icon> 主动查询设备状态
+        </el-button>
+        <el-button type="primary" @click="loadData">
+          <el-icon><Refresh /></el-icon> 刷新数据
+        </el-button>
+      </div>
     </div>
 
     <template v-if="device">
@@ -327,12 +332,13 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Refresh } from '@element-plus/icons-vue'
-import { getDeviceDetail, getDeviceCameraImages } from '@/api/admin'
+import { ArrowLeft, Refresh, Search } from '@element-plus/icons-vue'
+import { getDeviceDetail, getDeviceCameraImages, queryDeviceStatus } from '@/api/admin'
 import * as echarts from 'echarts'
 
 const route = useRoute()
 const loading = ref(false)
+const queryLoading = ref(false)
 const device = ref(null)
 const chartRef = ref(null)
 let chartInstance = null
@@ -423,6 +429,29 @@ const initChart = (dailyOrders) => {
       itemStyle: { color: '#409eff' }
     }]
   })
+}
+
+/**
+ * 主动查询设备状态
+ * 向后台发送 query_device_status 命令，设备在下次心跳或轮询时执行并上报最新状态
+ */
+const handleQueryStatus = async () => {
+  queryLoading.value = true
+  try {
+    await queryDeviceStatus(route.params.id)
+    ElMessage.success({
+      message: '查询指令已下发，设备将在下次心跳时上报最新状态',
+      duration: 4000,
+    })
+    // 5秒后自动刷新一次，看看设备是否已响应
+    setTimeout(() => {
+      loadData()
+    }, 5000)
+  } catch (error) {
+    ElMessage.error('下发查询指令失败')
+  } finally {
+    queryLoading.value = false
+  }
 }
 
 const loadData = async () => {

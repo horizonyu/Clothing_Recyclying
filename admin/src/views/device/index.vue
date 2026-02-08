@@ -97,8 +97,11 @@
             <span v-else class="text-muted">从未上报</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right" align="center">
+        <el-table-column label="操作" width="180" fixed="right" align="center">
           <template #default="{ row }">
+            <el-button link type="warning" @click="handleQueryStatus(row)">
+              <el-icon><Search /></el-icon> 查询
+            </el-button>
             <el-button link type="primary" @click="handleDetail(row)">
               <el-icon><View /></el-icon> 详情
             </el-button>
@@ -126,8 +129,8 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Refresh, View } from '@element-plus/icons-vue'
-import { getDeviceList, getDeviceStats } from '@/api/admin'
+import { Refresh, View, Search } from '@element-plus/icons-vue'
+import { getDeviceList, getDeviceStats, queryDeviceStatus } from '@/api/admin'
 
 const router = useRouter()
 
@@ -220,6 +223,23 @@ const handleSearch = () => {
 const handleReset = () => {
   Object.assign(searchForm, { device_id: '', status: '' })
   handleSearch()
+}
+
+const handleQueryStatus = async (row) => {
+  try {
+    await queryDeviceStatus(row.device_id)
+    ElMessage.success({
+      message: `已向 ${row.device_id} 下发查询指令，设备将在下次心跳时上报最新状态`,
+      duration: 4000,
+    })
+    // 5秒后自动刷新列表
+    setTimeout(() => {
+      loadStats()
+      loadData()
+    }, 5000)
+  } catch (error) {
+    ElMessage.error('下发查询指令失败')
+  }
 }
 
 const handleDetail = (row) => {

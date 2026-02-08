@@ -79,6 +79,15 @@ export function getDeviceCameraImages(deviceId, params) {
   })
 }
 
+// 主动查询设备状态（下发 query_device_status 命令）
+export function queryDeviceStatus(deviceId) {
+  return request({
+    url: '/device/query-status',
+    method: 'post',
+    params: { device_id: deviceId }
+  })
+}
+
 // ===== 订单管理 =====
 
 // 获取订单列表
