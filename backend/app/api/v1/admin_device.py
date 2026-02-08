@@ -1,12 +1,14 @@
 """
 管理后台 - 设备管理API
 """
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from loguru import logger
 from app.db.database import get_db
 from app.models.device import Device
+from app.models.order import DeliveryOrder
 from app.models.admin import Admin
 from app.schemas.common import ResponseModel, PaginatedResponse
 from app.api.v1.admin import get_current_admin
@@ -23,7 +25,7 @@ async def get_device_list(
     db: AsyncSession = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
-    """获取设备列表"""
+    """获取设备列表（含协议上报数据）"""
     try:
         query = select(Device)
         
@@ -47,17 +49,46 @@ async def get_device_list(
         result = await db.execute(query)
         devices = result.scalars().all()
         
-        # 转换为字典
+        # 转换为字典，包含协议新增字段
         items = []
         for device in devices:
+            # 计算在线状态（24小时内有心跳则为在线）
+            is_online = False
+            if device.last_heartbeat:
+                is_online = (datetime.now() - device.last_heartbeat).total_seconds() < 86400
+            
+            # 查询该设备的订单统计
+            order_stats = await db.execute(
+                select(
+                    func.count(DeliveryOrder.id),
+                    func.coalesce(func.sum(DeliveryOrder.weight), 0)
+                ).where(DeliveryOrder.device_id == device.device_id)
+            )
+            stats_row = order_stats.one()
+            total_orders = stats_row[0] or 0
+            total_weight = float(stats_row[1] or 0)
+            
             items.append({
                 "device_id": device.device_id,
                 "name": device.name,
                 "address": device.address,
-                "status": device.status,
+                "latitude": device.latitude,
+                "longitude": device.longitude,
+                "status": device.status if is_online or device.status != "online" else "offline",
                 "unit_price": device.unit_price,
-                "total_orders": 0,  # TODO: 统计订单数
-                "total_weight": 0.0  # TODO: 统计重量
+                # 协议新增字段
+                "battery_level": device.battery_level,
+                "smoke_sensor_status": device.smoke_sensor_status or 0,
+                "recycle_bin_full": device.recycle_bin_full or 0,
+                "delivery_window_open": device.delivery_window_open or 0,
+                "is_using": device.is_using or 0,
+                "capacity_percent": device.capacity_percent or 0,
+                "firmware_version": device.firmware_version,
+                "last_heartbeat": device.last_heartbeat.strftime("%Y-%m-%d %H:%M:%S") if device.last_heartbeat else None,
+                # 统计数据
+                "total_orders": total_orders,
+                "total_weight": round(total_weight, 2),
+                "created_at": device.created_at.strftime("%Y-%m-%d %H:%M:%S") if device.created_at else None,
             })
         
         return ResponseModel(data=PaginatedResponse(
@@ -70,3 +101,181 @@ async def get_device_list(
     except Exception as e:
         logger.error(f"获取设备列表失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"获取设备列表失败: {str(e)}")
+
+
+@router.get("/device/detail/{device_id}", response_model=ResponseModel)
+async def get_device_detail(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """获取设备详情（含全部协议字段）"""
+    try:
+        result = await db.execute(select(Device).where(Device.device_id == device_id))
+        device = result.scalar_one_or_none()
+        
+        if not device:
+            raise HTTPException(status_code=404, detail="设备不存在")
+        
+        # 在线状态判断
+        is_online = False
+        if device.last_heartbeat:
+            is_online = (datetime.now() - device.last_heartbeat).total_seconds() < 86400
+        
+        # 订单统计
+        order_stats = await db.execute(
+            select(
+                func.count(DeliveryOrder.id),
+                func.coalesce(func.sum(DeliveryOrder.weight), 0),
+                func.coalesce(func.sum(DeliveryOrder.amount), 0)
+            ).where(DeliveryOrder.device_id == device.device_id)
+        )
+        stats_row = order_stats.one()
+        
+        # 今日订单统计
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_stats = await db.execute(
+            select(
+                func.count(DeliveryOrder.id),
+                func.coalesce(func.sum(DeliveryOrder.weight), 0)
+            ).where(and_(
+                DeliveryOrder.device_id == device.device_id,
+                DeliveryOrder.created_at >= today_start
+            ))
+        )
+        today_row = today_stats.one()
+        
+        # 最近7天每日订单数（用于图表）
+        daily_orders = []
+        for i in range(6, -1, -1):
+            date = (datetime.now() - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+            next_date = date + timedelta(days=1)
+            day_result = await db.execute(
+                select(func.count(DeliveryOrder.id)).where(and_(
+                    DeliveryOrder.device_id == device.device_id,
+                    DeliveryOrder.created_at >= date,
+                    DeliveryOrder.created_at < next_date
+                ))
+            )
+            daily_orders.append({
+                "date": date.strftime("%m-%d"),
+                "count": day_result.scalar() or 0
+            })
+        
+        data = {
+            # 基本信息
+            "device_id": device.device_id,
+            "name": device.name,
+            "address": device.address,
+            "latitude": device.latitude,
+            "longitude": device.longitude,
+            "status": device.status if is_online or device.status != "online" else "offline",
+            "unit_price": device.unit_price,
+            "min_weight": device.min_weight,
+            
+            # 协议上报数据
+            "battery_level": device.battery_level,
+            "smoke_sensor_status": device.smoke_sensor_status or 0,
+            "recycle_bin_full": device.recycle_bin_full or 0,
+            "delivery_window_open": device.delivery_window_open or 0,
+            "is_using": device.is_using or 0,
+            "capacity_percent": device.capacity_percent or 0,
+            "firmware_version": device.firmware_version,
+            "last_heartbeat": device.last_heartbeat.strftime("%Y-%m-%d %H:%M:%S") if device.last_heartbeat else None,
+            
+            # 传感器数据
+            "temperature": device.temperature,
+            "humidity": device.humidity,
+            "smoke_level": device.smoke_level,
+            
+            # 统计数据
+            "total_orders": stats_row[0] or 0,
+            "total_weight": round(float(stats_row[1] or 0), 2),
+            "total_amount": round(float(stats_row[2] or 0), 2),
+            "today_orders": today_row[0] or 0,
+            "today_weight": round(float(today_row[1] or 0), 2),
+            
+            # 图表数据
+            "daily_orders": daily_orders,
+            
+            # 时间
+            "created_at": device.created_at.strftime("%Y-%m-%d %H:%M:%S") if device.created_at else None,
+            "updated_at": device.updated_at.strftime("%Y-%m-%d %H:%M:%S") if device.updated_at else None,
+        }
+        
+        return ResponseModel(data=data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取设备详情失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取设备详情失败: {str(e)}")
+
+
+@router.get("/device/stats", response_model=ResponseModel)
+async def get_device_stats(
+    db: AsyncSession = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """获取设备统计概览（用于仪表盘）"""
+    try:
+        # 总设备数
+        total_result = await db.execute(select(func.count(Device.id)))
+        total = total_result.scalar() or 0
+        
+        # 在线设备数（24小时内有心跳）
+        online_threshold = datetime.now() - timedelta(hours=24)
+        online_result = await db.execute(
+            select(func.count(Device.id)).where(
+                and_(
+                    Device.status == "online",
+                    Device.last_heartbeat >= online_threshold
+                )
+            )
+        )
+        online = online_result.scalar() or 0
+        
+        # 离线设备数
+        offline = total - online
+        
+        # 告警设备（烟感告警）
+        smoke_alert_result = await db.execute(
+            select(func.count(Device.id)).where(Device.smoke_sensor_status == 1)
+        )
+        smoke_alert = smoke_alert_result.scalar() or 0
+        
+        # 满载设备
+        full_result = await db.execute(
+            select(func.count(Device.id)).where(Device.recycle_bin_full == 1)
+        )
+        full_count = full_result.scalar() or 0
+        
+        # 使用中设备
+        using_result = await db.execute(
+            select(func.count(Device.id)).where(Device.is_using == 1)
+        )
+        using_count = using_result.scalar() or 0
+        
+        # 低电量设备（电量<20%）
+        low_battery_result = await db.execute(
+            select(func.count(Device.id)).where(
+                and_(
+                    Device.battery_level != None,
+                    Device.battery_level < 20
+                )
+            )
+        )
+        low_battery = low_battery_result.scalar() or 0
+        
+        return ResponseModel(data={
+            "total": total,
+            "online": online,
+            "offline": offline,
+            "smoke_alert": smoke_alert,
+            "full_count": full_count,
+            "using_count": using_count,
+            "low_battery": low_battery,
+            "online_rate": round(online / total * 100, 1) if total > 0 else 0,
+        })
+    except Exception as e:
+        logger.error(f"获取设备统计失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取设备统计失败: {str(e)}")

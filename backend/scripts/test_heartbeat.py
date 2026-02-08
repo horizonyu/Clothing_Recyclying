@@ -13,7 +13,7 @@ import hashlib
 from datetime import datetime
 
 # 配置
-API_BASE_URL = "http://localhost:8000/api/v1"
+API_BASE_URL = "http://42.194.134.223:8000/api/v1"
 DEVICE_ID = "DEV001"  # 请替换为实际设备ID
 
 # 报文包头包尾

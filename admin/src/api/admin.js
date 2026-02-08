@@ -34,6 +34,8 @@ export function getDashboardStats(params) {
   })
 }
 
+// ===== 设备管理 =====
+
 // 获取设备列表
 export function getDeviceList(params) {
   return request({
@@ -46,7 +48,15 @@ export function getDeviceList(params) {
 // 获取设备详情
 export function getDeviceDetail(id) {
   return request({
-    url: `/device/${id}`,
+    url: `/device/detail/${id}`,
+    method: 'get'
+  })
+}
+
+// 获取设备统计概览
+export function getDeviceStats() {
+  return request({
+    url: '/device/stats',
     method: 'get'
   })
 }
@@ -59,6 +69,8 @@ export function updateDevice(id, data) {
     data
   })
 }
+
+// ===== 订单管理 =====
 
 // 获取订单列表
 export function getOrderList(params) {
@@ -86,6 +98,8 @@ export function auditOrder(id, data) {
   })
 }
 
+// ===== 用户管理 =====
+
 // 获取用户列表
 export function getUserList(params) {
   return request({
@@ -111,6 +125,8 @@ export function updateUserStatus(id, data) {
     data
   })
 }
+
+// ===== 财务管理 =====
 
 // 获取提现列表
 export function getWithdrawList(params) {

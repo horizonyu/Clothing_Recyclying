@@ -223,17 +223,72 @@ async def get_dashboard_stats(
             )
             chart_values.append(day_orders_result.scalar() or 0)
         
-        # 告警信息（示例）
+        # 告警信息
         alerts = []
+        alert_id = 0
+        
+        # 离线设备告警
+        offline_threshold = now - timedelta(hours=24)
         offline_devices_result = await db.execute(
-            select(func.count(Device.id)).where(Device.status == "offline")
+            select(func.count(Device.id)).where(
+                or_(
+                    Device.status == "offline",
+                    Device.last_heartbeat == None,
+                    Device.last_heartbeat < offline_threshold
+                )
+            )
         )
         offline_count = offline_devices_result.scalar() or 0
         if offline_count > 0:
+            alert_id += 1
             alerts.append({
-                "id": 1,
+                "id": alert_id,
                 "level": "警告",
                 "message": f"有{offline_count}台设备离线",
+                "time": now.strftime('%H:%M')
+            })
+        
+        # 烟感告警
+        smoke_alert_result = await db.execute(
+            select(func.count(Device.id)).where(Device.smoke_sensor_status == 1)
+        )
+        smoke_alert_count = smoke_alert_result.scalar() or 0
+        if smoke_alert_count > 0:
+            alert_id += 1
+            alerts.append({
+                "id": alert_id,
+                "level": "紧急",
+                "message": f"有{smoke_alert_count}台设备烟感告警，请立即处理！",
+                "time": now.strftime('%H:%M')
+            })
+        
+        # 低电量告警
+        low_battery_result = await db.execute(
+            select(func.count(Device.id)).where(
+                and_(Device.battery_level != None, Device.battery_level < 20)
+            )
+        )
+        low_battery_count = low_battery_result.scalar() or 0
+        if low_battery_count > 0:
+            alert_id += 1
+            alerts.append({
+                "id": alert_id,
+                "level": "警告",
+                "message": f"有{low_battery_count}台设备电量低于20%",
+                "time": now.strftime('%H:%M')
+            })
+        
+        # 仓体满载告警
+        full_bin_result = await db.execute(
+            select(func.count(Device.id)).where(Device.recycle_bin_full == 1)
+        )
+        full_bin_count = full_bin_result.scalar() or 0
+        if full_bin_count > 0:
+            alert_id += 1
+            alerts.append({
+                "id": alert_id,
+                "level": "提示",
+                "message": f"有{full_bin_count}台设备仓体已满，请及时清运",
                 "time": now.strftime('%H:%M')
             })
         
