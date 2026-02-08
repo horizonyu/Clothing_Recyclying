@@ -204,15 +204,18 @@ class DeviceService:
         )
         return result.scalar_one_or_none()
     
-    async def process_device_status_report(self, report_data: dict) -> Tuple[bool, str, dict]:
+    async def process_device_status_report(self, report_data: dict) -> Tuple[bool, str, dict, Optional[dict]]:
         """
         处理设备常规状态上报
+        
+        按协议规定：设备第一次被用户使用时（is_using=1），
+        除了返回ack消息，还需返回time_sync消息。
         
         Args:
             report_data: 设备状态上报报文（JSON字典）
         
         Returns:
-            (success, message, ack_response)
+            (success, message, ack_response, time_sync_or_none)
         """
         device_id = report_data.get("device_id", "")
         
@@ -220,13 +223,16 @@ class DeviceService:
             # 1. 验证校验码
             if not verify_check_code(report_data):
                 ack = build_server_ack(device_id, "device_status_report", 1, "校验失败")
-                return False, "校验码验证失败", ack
+                return False, "校验码验证失败", ack, None
             
             # 2. 查询设备
             device = await self.get_device(device_id)
             if not device:
                 ack = build_server_ack(device_id, "device_status_report", 1, "设备不存在")
-                return False, "设备不存在或未注册", ack
+                return False, "设备不存在或未注册", ack, None
+            
+            # 记录之前的使用状态，用于判断是否需要下发time_sync
+            previous_is_using = device.is_using or 0
             
             # 3. 更新设备状态
             data = report_data.get("data", {})
@@ -315,23 +321,34 @@ class DeviceService:
             
             # 4. 构建成功应答
             ack = build_server_ack(device_id, "device_status_report", 0, "数据接收成功")
-            return True, "处理成功", ack
+            
+            # 5. 按协议：设备首次被用户使用时(is_using从0变为1)，
+            #    除了返回ack消息，还需返回time_sync消息
+            time_sync = None
+            if is_using == 1 and previous_is_using == 0:
+                time_sync = build_time_sync(device_id)
+                logger.info(f"设备 {device_id} 首次被用户使用，下发时间同步")
+            
+            return True, "处理成功", ack, time_sync
             
         except Exception as e:
             logger.error(f"处理设备状态上报失败: {e}", exc_info=True)
             await self.db.rollback()
             ack = build_server_ack(device_id, "device_status_report", 1, f"处理失败: {str(e)}")
-            return False, str(e), ack
+            return False, str(e), ack, None
     
-    async def process_heartbeat_report(self, report_data: dict) -> Tuple[bool, str, dict, dict]:
+    async def process_heartbeat_report(self, report_data: dict) -> Tuple[bool, str, dict, dict, Optional[dict]]:
         """
         处理设备心跳包上报
+        
+        按协议规定：收到心跳后下发 time_sync 消息。
+        同时检查是否有待执行命令（如 query_device_status），一并下发。
         
         Args:
             report_data: 心跳报文（JSON字典）
         
         Returns:
-            (success, message, ack_response, time_sync_response)
+            (success, message, ack_response, time_sync_response, pending_command_or_none)
         """
         device_id = report_data.get("device_id", "")
         
@@ -340,32 +357,98 @@ class DeviceService:
             if not verify_check_code(report_data):
                 ack = build_server_ack(device_id, "heartbeat_report", 1, "校验失败")
                 time_sync = build_time_sync(device_id)
-                return False, "校验码验证失败", ack, time_sync
+                return False, "校验码验证失败", ack, time_sync, None
             
             # 2. 查询设备
             device = await self.get_device(device_id)
             if not device:
                 ack = build_server_ack(device_id, "heartbeat_report", 1, "设备不存在")
                 time_sync = build_time_sync(device_id)
-                return False, "设备不存在或未注册", ack, time_sync
+                return False, "设备不存在或未注册", ack, time_sync, None
             
             # 3. 更新设备心跳时间
             device.status = "online"
             device.last_heartbeat = datetime.now()
             
+            # 4. 检查并获取待执行命令
+            pending_cmd_packet = None
+            if device.pending_command:
+                cmd_type = device.pending_command
+                logger.info(f"设备 {device_id} 有待执行命令: {cmd_type}")
+                
+                if cmd_type == "query_device_status":
+                    pending_cmd_packet = build_query_device_status(device_id)
+                    logger.info(f"通过心跳响应下发 query_device_status 命令给设备 {device_id}")
+                
+                # 清除已下发的命令
+                device.pending_command = None
+                device.pending_command_at = None
+            
             await self.db.commit()
             
             logger.info(f"设备 {device_id} 心跳上报处理成功, 时间戳: {report_data.get('timestamp')}")
             
-            # 4. 构建应答 + 时间同步
+            # 5. 构建应答 + 时间同步
             ack = build_server_ack(device_id, "heartbeat_report", 0, "数据接收成功")
             time_sync = build_time_sync(device_id)
             
-            return True, "处理成功", ack, time_sync
+            return True, "处理成功", ack, time_sync, pending_cmd_packet
             
         except Exception as e:
             logger.error(f"处理心跳上报失败: {e}", exc_info=True)
             await self.db.rollback()
             ack = build_server_ack(device_id, "heartbeat_report", 1, f"处理失败: {str(e)}")
             time_sync = build_time_sync(device_id)
-            return False, str(e), ack, time_sync
+            return False, str(e), ack, time_sync, None
+    
+    async def queue_command(self, device_id: str, command: str) -> bool:
+        """
+        为设备排队一个待执行命令
+        
+        设备将在下次心跳上报或主动轮询时获取该命令。
+        
+        Args:
+            device_id: 设备ID
+            command: 命令类型，如 "query_device_status"
+        
+        Returns:
+            是否成功排队
+        """
+        device = await self.get_device(device_id)
+        if not device:
+            return False
+        
+        device.pending_command = command
+        device.pending_command_at = datetime.now()
+        await self.db.commit()
+        
+        logger.info(f"为设备 {device_id} 排队命令: {command}")
+        return True
+    
+    async def get_and_clear_pending_command(self, device_id: str) -> Optional[dict]:
+        """
+        获取并清除设备的待执行命令（设备主动轮询时使用）
+        
+        Args:
+            device_id: 设备ID
+        
+        Returns:
+            待执行命令报文，如果没有则返回 None
+        """
+        device = await self.get_device(device_id)
+        if not device or not device.pending_command:
+            return None
+        
+        cmd_type = device.pending_command
+        cmd_packet = None
+        
+        if cmd_type == "query_device_status":
+            cmd_packet = build_query_device_status(device_id)
+        
+        # 清除已取走的命令
+        device.pending_command = None
+        device.pending_command_at = None
+        await self.db.commit()
+        
+        logger.info(f"设备 {device_id} 轮询获取命令: {cmd_type}")
+        return cmd_packet

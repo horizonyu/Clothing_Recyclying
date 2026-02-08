@@ -75,24 +75,32 @@ async def device_status_report(
         device_service = DeviceService(db)
         report_dict = report.dict()
         
-        success, message, ack = await device_service.process_device_status_report(report_dict)
+        success, message, ack, time_sync = await device_service.process_device_status_report(report_dict)
+        
+        # 构建响应数据
+        response_data = {"ack": ack}
+        
+        # 按协议：设备首次被用户使用时(is_using从0→1)，
+        # 除了返回ack消息，还需返回time_sync消息
+        if time_sync:
+            response_data["time_sync"] = time_sync
         
         if success:
             return ResponseModel(
                 code=0,
                 message="数据接收成功",
-                data=ack
+                data=response_data
             )
         else:
             return ResponseModel(
                 code=1,
                 message=message,
-                data=ack
+                data=response_data
             )
     except Exception as e:
         logger.error(f"处理设备状态上报异常: {e}", exc_info=True)
         ack = build_server_ack(report.device_id, "device_status_report", 1, f"服务器异常: {str(e)}")
-        return ResponseModel(code=1, message=str(e), data=ack)
+        return ResponseModel(code=1, message=str(e), data={"ack": ack})
 
 
 @router.post("/heartbeat", response_model=ResponseModel)
@@ -121,13 +129,17 @@ async def device_heartbeat(
         device_service = DeviceService(db)
         heartbeat_dict = heartbeat.dict()
         
-        success, message, ack, time_sync = await device_service.process_heartbeat_report(heartbeat_dict)
+        success, message, ack, time_sync, pending_cmd = await device_service.process_heartbeat_report(heartbeat_dict)
         
         # 心跳响应同时包含应答和时间同步
         response_data = {
             "ack": ack,
             "time_sync": time_sync
         }
+        
+        # 如果有待执行命令，一并下发（如 query_device_status）
+        if pending_cmd:
+            response_data["command"] = pending_cmd
         
         if success:
             return ResponseModel(
@@ -202,7 +214,7 @@ async def qrcode_device_report(
         
         # 5. 处理设备状态
         device_service = DeviceService(db)
-        success, message, ack = await device_service.process_device_status_report(report_data)
+        success, message, ack, _time_sync = await device_service.process_device_status_report(report_data)
         
         if success:
             # 返回设备信息给小程序
@@ -251,17 +263,24 @@ async def query_device_status(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    后台主动查询设备状态（生成查询报文）
+    后台主动查询设备状态
     
     触发条件：后台运维、业务需要时，主动下发查询指令。
-    设备收到后，立即上报全量常规状态。
+    设备收到后，立即上报全量常规状态（device_status_report），
+    后台通过 /report 接口接收并更新设备信息。
     
-    本接口生成query_device_status报文，可通过TCP下发给设备。
+    工作流程：
+    1. 后台调用此接口，生成 query_device_status 报文
+    2. 命令被保存到设备的 pending_command 队列
+    3. 设备通过以下两种方式获取命令：
+       a. 下次心跳上报时，心跳响应中会携带该命令
+       b. 设备主动轮询 /device/pending-commands/{device_id} 获取
+    4. 设备收到命令后，上报 device_status_report
+    5. 后台通过 /report 接口处理并更新设备状态
     
-    返回：query_device_status报文（含完整包头包尾格式）
+    返回：query_device_status 报文（含完整包头包尾格式）
     """
     try:
-        # 验证设备存在
         device_service = DeviceService(db)
         device = await device_service.get_device(device_id)
         
@@ -271,18 +290,22 @@ async def query_device_status(
                 detail={"code": 10001, "message": "设备不存在"}
             )
         
-        # 构建查询报文
+        # 1. 构建查询报文
         query_data = build_query_device_status(device_id)
-        
-        # 构建完整报文（含包头包尾）
         full_packet = wrap_packet(query_data)
+        
+        # 2. 将命令排队到设备，等待设备获取
+        await device_service.queue_command(device_id, "query_device_status")
+        
+        logger.info(f"已为设备 {device_id} 排队 query_device_status 命令")
         
         return ResponseModel(
             code=0,
-            message="查询报文已生成",
+            message="查询命令已下发，等待设备响应",
             data={
                 "query_packet": query_data,
-                "full_packet": full_packet
+                "full_packet": full_packet,
+                "delivery_method": "设备将在下次心跳或主动轮询时获取此命令"
             }
         )
     
@@ -290,6 +313,51 @@ async def query_device_status(
         raise
     except Exception as e:
         logger.error(f"生成查询报文异常: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": 10000, "message": f"服务器内部错误: {str(e)}"}
+        )
+
+
+@router.get("/pending-commands/{device_id}", response_model=ResponseModel)
+async def get_pending_commands(
+    device_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    设备轮询待执行命令（硬件直接调用）
+    
+    设备可定期调用此接口检查是否有后台下发的命令。
+    如果有待执行命令（如 query_device_status），将返回命令报文。
+    命令获取后会自动清除，不会重复下发。
+    
+    设备收到 query_device_status 命令后，应立即上报 device_status_report。
+    """
+    try:
+        device_service = DeviceService(db)
+        cmd_packet = await device_service.get_and_clear_pending_command(device_id)
+        
+        if cmd_packet:
+            full_packet = wrap_packet(cmd_packet)
+            return ResponseModel(
+                code=0,
+                message="有待执行命令",
+                data={
+                    "has_command": True,
+                    "command": cmd_packet,
+                    "full_packet": full_packet
+                }
+            )
+        else:
+            return ResponseModel(
+                code=0,
+                message="无待执行命令",
+                data={
+                    "has_command": False
+                }
+            )
+    except Exception as e:
+        logger.error(f"获取待执行命令异常: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={"code": 10000, "message": f"服务器内部错误: {str(e)}"}

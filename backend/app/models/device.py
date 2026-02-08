@@ -45,6 +45,10 @@ class Device(Base):
     humidity = Column(Float, nullable=True, comment="湿度")
     smoke_level = Column(Float, nullable=True, comment="烟雾浓度")
     
+    # 待执行命令（后台主动下发，设备通过心跳或轮询获取）
+    pending_command = Column(String(50), nullable=True, comment="待执行命令: query_device_status等")
+    pending_command_at = Column(DateTime, nullable=True, comment="命令创建时间")
+    
     # 时间
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
